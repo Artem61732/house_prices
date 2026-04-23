@@ -1,1 +1,4 @@
-
+data/
+mlruns/
+__pycache__/
+.venv/
