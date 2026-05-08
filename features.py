@@ -140,3 +140,24 @@ def prepare_for_lightgbm(X: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     for c in cat_features:
         X[c] = X[c].fillna('None').astype('category')
     return X, cat_features
+
+
+def preprocess(
+    df: pd.DataFrame,
+    skewed_cols: list[str] | None = None,
+    skew_threshold: float = 0.75,
+) -> tuple[pd.DataFrame, list[str]]:
+    """
+    Полная цепочка препроцессинга: NaN -> FE -> log1p скошенных.
+
+    Если `skewed_cols` не передан — определяем их по данным (use case: train).
+    Если передан — применяем согласованно (use case: test/valid).
+
+    Возвращает (df_processed, skewed_cols).
+    """
+    df = fill_na_domain(df)
+    df = feature_engineering(df)
+    if skewed_cols is None:
+        skewed_cols = get_skewed_columns(df, threshold=skew_threshold)
+    df = log_skewed_features(df, skewed_cols)
+    return df, skewed_cols

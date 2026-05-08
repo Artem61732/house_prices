@@ -12,6 +12,9 @@
 from __future__ import annotations
 
 import json
+import shutil
+import time
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -24,18 +27,12 @@ from sklearn.model_selection import KFold, cross_val_score
 from sklearn.pipeline import Pipeline
 
 from config import cfg
-from features import (
-    feature_engineering,
-    fill_na_domain,
-    get_skewed_columns,
-    log_skewed_features,
-    prepare_for_catboost,
-    prepare_for_lightgbm,
-)
+from features import preprocess, prepare_for_catboost, prepare_for_lightgbm
 from main import get_preprocessor, load_data
 
 
 PARAMS_PATH = Path(__file__).parent / "best_params.json"
+BACKUP_PATH = Path(__file__).parent / "best_params.backup.json"
 
 CATBOOST_FIXED = dict(
     iterations=1500,
@@ -57,10 +54,8 @@ LIGHTGBM_FIXED = dict(
 
 def prepare_data():
     X, y, _ = load_data()
-    X = fill_na_domain(X)
-    X = feature_engineering(X)
-    skewed_cols = get_skewed_columns(X, threshold=0.75)
-    X = log_skewed_features(X, skewed_cols)
+    skew_threshold = float(cfg.preprocess.skew_threshold)
+    X, _ = preprocess(X, skew_threshold=skew_threshold)
     y = np.log1p(y).to_numpy()
     return X, y
 
@@ -80,8 +75,6 @@ def cv_score_catboost(params: dict, X, y, cat_features, kf) -> float:
 
 
 def make_objective_catboost(X, y, cat_features, kf):
-    import time
-
     def objective(trial: optuna.Trial) -> float:
         params = dict(
             learning_rate=trial.suggest_float('learning_rate', 0.03, 0.1, log=True),
@@ -198,8 +191,6 @@ def tune_ridge(n_trials: int, n_splits: int, random_state: int):
 # ============================ LightGBM ============================
 
 def make_objective_lightgbm(X, y, kf):
-    import time
-
     def objective(trial: optuna.Trial) -> float:
         params = dict(
             learning_rate=trial.suggest_float('learning_rate', 0.01, 0.1, log=True),
@@ -282,11 +273,25 @@ def tune_lightgbm(n_trials: int, n_splits: int, random_state: int):
 
 # ============================ Сохранение ============================
 
+def _backup_params():
+    """Перед перезаписью копирует текущий best_params.json в .backup.json
+    (плюс timestamped копию). Чтобы случайный запуск тюнинга не убил историю."""
+    if not PARAMS_PATH.exists():
+        return
+    shutil.copy2(PARAMS_PATH, BACKUP_PATH)
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    timestamped = PARAMS_PATH.with_name(f"best_params.{ts}.json")
+    shutil.copy2(PARAMS_PATH, timestamped)
+    print(f"Бэкап текущих параметров: {BACKUP_PATH.name} и {timestamped.name}")
+
+
 def save_best_params(
     catboost_params=None, catboost_score=None,
     ridge_params=None, ridge_score=None,
     lightgbm_params=None, lightgbm_score=None,
 ):
+    _backup_params()
+
     payload = {}
     if PARAMS_PATH.exists():
         try:
@@ -305,7 +310,7 @@ def save_best_params(
         payload['lightgbm_cv_rmsle'] = lightgbm_score
 
     PARAMS_PATH.write_text(json.dumps(payload, indent=2), encoding='utf-8')
-    print(f"\nСохранено в {PARAMS_PATH}")
+    print(f"Сохранено в {PARAMS_PATH}")
 
 
 if __name__ == "__main__":
@@ -321,13 +326,9 @@ if __name__ == "__main__":
     parser.add_argument('--n-trials', type=int, default=None)
     args = parser.parse_args()
 
-    cv_cfg = getattr(cfg, 'cv', None)
-    n_splits = int(getattr(cv_cfg, 'n_splits', 5)) if cv_cfg is not None else 5
-    random_state = int(getattr(cv_cfg, 'random_state', 42)) if cv_cfg is not None else 42
-
-    tune_cfg = getattr(cfg, 'tune', None)
-    n_trials_default = int(getattr(tune_cfg, 'n_trials', 30)) if tune_cfg is not None else 30
-    n_trials = args.n_trials if args.n_trials is not None else n_trials_default
+    n_splits = int(cfg.cv.n_splits)
+    random_state = int(cfg.random_state)
+    n_trials = args.n_trials if args.n_trials is not None else int(cfg.tune.n_trials)
 
     cb_params = cb_score = ridge_params = ridge_score = lgb_params = lgb_score = None
 
