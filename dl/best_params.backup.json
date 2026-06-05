@@ -1,0 +1,24 @@
+{
+  "dnn": {
+    "hidden_layers": [
+      256,
+      512,
+      512
+    ],
+    "activation": "elu",
+    "batch_norm": false,
+    "dropout": 0.3187149507491033,
+    "cat_encoding": "onehot",
+    "batch_size": 32,
+    "n_epochs": 80,
+    "learning_rate": 0.00014352011136230925,
+    "patience": 10,
+    "loss_fn": "mae",
+    "optimizer": "adam",
+    "scheduler": "cosine",
+    "weight_decay": 1.0022396791143342e-05,
+    "cv_strategy": "stratified",
+    "stratify_bins": 10
+  },
+  "dnn_cv_rmsle": 0.12382505536079406
+}

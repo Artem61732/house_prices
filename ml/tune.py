@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -26,9 +27,14 @@ from sklearn.metrics import root_mean_squared_error
 from sklearn.model_selection import KFold, cross_val_score
 from sklearn.pipeline import Pipeline
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from config import cfg
+from data import load_data
 from features import preprocess, prepare_for_catboost, prepare_for_lightgbm
-from main import get_preprocessor, load_data
+from ml.main import get_preprocessor
 
 
 PARAMS_PATH = Path(__file__).parent / "best_params.json"
@@ -61,18 +67,6 @@ def prepare_data():
 
 
 # ============================ CatBoost ============================
-
-def cv_score_catboost(params: dict, X, y, cat_features, kf) -> float:
-    rmsle_folds = []
-    for tr_idx, va_idx in kf.split(X):
-        X_tr, X_va = X.iloc[tr_idx], X.iloc[va_idx]
-        y_tr, y_va = y[tr_idx], y[va_idx]
-        model = CatBoostRegressor(cat_features=cat_features, **CATBOOST_FIXED, **params)
-        model.fit(X_tr, y_tr, eval_set=(X_va, y_va), use_best_model=True)
-        pred = model.predict(X_va)
-        rmsle_folds.append(root_mean_squared_error(y_va, pred))
-    return float(np.mean(rmsle_folds))
-
 
 def make_objective_catboost(X, y, cat_features, kf):
     def objective(trial: optuna.Trial) -> float:
@@ -274,8 +268,7 @@ def tune_lightgbm(n_trials: int, n_splits: int, random_state: int):
 # ============================ Сохранение ============================
 
 def _backup_params():
-    """Перед перезаписью копирует текущий best_params.json в .backup.json
-    (плюс timestamped копию). Чтобы случайный запуск тюнинга не убил историю."""
+    """Перед перезаписью копирует текущий best_params.json в .backup.json."""
     if not PARAMS_PATH.exists():
         return
     shutil.copy2(PARAMS_PATH, BACKUP_PATH)

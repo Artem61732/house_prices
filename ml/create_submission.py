@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import warnings
 from pathlib import Path
 
@@ -18,9 +19,14 @@ from lightgbm import LGBMRegressor
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from config import cfg
+from data import load_data
 from features import preprocess, prepare_for_catboost, prepare_for_lightgbm
-from main import get_preprocessor, load_data
+from ml.main import get_preprocessor
 
 
 warnings.filterwarnings('ignore', message=".*select_dtypes.*str.*")

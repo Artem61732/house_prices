@@ -18,3 +18,4 @@ catboost_info/
 
 # Сгенерированные результаты
 submission.csv
+submission_dl.csv

@@ -1,0 +1,23 @@
+{
+  "dnn": {
+    "hidden_layers": [
+      256,
+      256
+    ],
+    "activation": "leaky_relu",
+    "batch_norm": true,
+    "dropout": 0.14561457009902096,
+    "cat_encoding": "embedding",
+    "batch_size": 64,
+    "n_epochs": 2,
+    "learning_rate": 0.0010677482709481358,
+    "patience": 1,
+    "loss_fn": "huber",
+    "optimizer": "rmsprop",
+    "scheduler": "step",
+    "weight_decay": 0.0017123375973163992,
+    "cv_strategy": "stratified",
+    "stratify_bins": 10
+  },
+  "dnn_cv_rmsle": 5.098202705383301
+}

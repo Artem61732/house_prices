@@ -142,6 +142,16 @@ def prepare_for_lightgbm(X: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     return X, cat_features
 
 
+def prepare_for_dl(X: pd.DataFrame) -> tuple[list[str], list[str]]:
+    """
+    Разделяет признаки для DL-пайплайна:
+    числовые (int/float) и категориальные (object).
+    """
+    numeric_cols = X.select_dtypes(include=[np.number]).columns.tolist()
+    categorical_cols = X.select_dtypes(include=['object']).columns.tolist()
+    return numeric_cols, categorical_cols
+
+
 def preprocess(
     df: pd.DataFrame,
     skewed_cols: list[str] | None = None,

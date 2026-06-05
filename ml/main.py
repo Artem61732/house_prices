@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import warnings
 from pathlib import Path
 
@@ -28,7 +29,12 @@ from sklearn.model_selection import KFold, cross_val_predict, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from config import cfg
+from data import load_data
 from features import (
     preprocess,
     prepare_for_catboost,
@@ -40,30 +46,6 @@ warnings.filterwarnings('ignore', message=".*select_dtypes.*str.*")
 
 BEST_PARAMS_PATH = Path(__file__).parent / "best_params.json"
 RANDOM_STATE = int(cfg.random_state)
-
-
-# =================================================================
-# DATA
-# =================================================================
-
-def load_data(train_path=cfg.paths.train, test_path=cfg.paths.test, verbose=True):
-    """Загружает train/test и удаляет 'классические' выбросы House Prices."""
-    train_data = pd.read_csv(train_path)
-    test_data = pd.read_csv(test_path)
-
-    if {'GrLivArea', 'SalePrice'} <= set(train_data.columns):
-        before = len(train_data)
-        outlier_mask = (
-            (train_data['GrLivArea'] > 4000)
-            & (train_data['SalePrice'] < 300000)
-        )
-        train_data = train_data.drop(train_data[outlier_mask].index)
-        if verbose:
-            print(f"Удалено выбросов GrLivArea: {before - len(train_data)} строк")
-
-    X = train_data.drop('SalePrice', axis=1)
-    y = train_data['SalePrice']
-    return X, y, test_data
 
 
 # =================================================================
