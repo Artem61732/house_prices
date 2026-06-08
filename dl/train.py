@@ -1,9 +1,13 @@
-"""Обучение DNN: оптимизаторы, scheduler, early stopping, KFold CV."""
+"""
+Обучение DNN: оптимизаторы, scheduler, early stopping, KFold CV.
+
+Метрика CV — RMSLE на log1p(SalePrice). Таргет обучается в log-шкале,
+поэтому RMSLE = RMSE между y_log и pred_log (root_mean_squared_error).
+"""
 
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, field
 
 import numpy as np
 import torch
@@ -13,6 +17,7 @@ from sklearn.model_selection import KFold, StratifiedKFold
 
 from dl.dataset import FeatureEncoder, make_dataloader
 from dl.model import HousePriceMLP
+from dl.train_config import TrainConfig
 
 
 LOSS_FNS = {
@@ -22,26 +27,6 @@ LOSS_FNS = {
 }
 
 CV_STRATEGIES = {'kfold', 'stratified'}
-
-
-@dataclass
-class TrainConfig:
-    name: str = 'default'
-    hidden_layers: list[int] = field(default_factory=lambda: [128, 64])
-    activation: str = 'relu'
-    batch_norm: bool = False
-    dropout: float = 0.0
-    cat_encoding: str = 'freq'  # embedding|onehot|target|freq
-    cv_strategy: str = 'stratified'  # kfold|stratified (для регрессии — по квантильным бинам)
-    stratify_bins: int = 10
-    batch_size: int = 64
-    n_epochs: int = 100
-    learning_rate: float = 1e-3
-    patience: int = 15
-    loss_fn: str = 'mse'
-    optimizer: str = 'adam'
-    scheduler: str | None = 'cosine'
-    weight_decay: float = 0.0
 
 
 def get_device(device_cfg: str = 'auto') -> torch.device:

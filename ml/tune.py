@@ -2,22 +2,19 @@
 Тюнинг моделей через Optuna.
 
 - KFold-CV (n_splits из config.yaml) на лог-таргете => RMSLE = RMSE.
-- CatBoost: ранняя остановка по eval_set + Optuna-pruning (плохие trials
-  отсекаются после первых фолдов).
+- CatBoost: ранняя остановка по eval_set + Optuna-pruning.
 - Ridge: лёгкий поиск alpha в логарифмической шкале.
-- Лучшие параметры сохраняются в best_params.json и автоматически
-  подхватываются create_submission.py.
+- Лучшие параметры сохраняются в outputs/ml/best_params.json.
 """
 
 from __future__ import annotations
 
 import json
 import shutil
-import sys
 import time
 from datetime import datetime
-from pathlib import Path
 
+import bootstrap  # noqa: F401
 import numpy as np
 import optuna
 from catboost import CatBoostRegressor
@@ -27,43 +24,16 @@ from sklearn.metrics import root_mean_squared_error
 from sklearn.model_selection import KFold, cross_val_score
 from sklearn.pipeline import Pipeline
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
 from config import cfg
-from data import load_data
-from features import preprocess, prepare_for_catboost, prepare_for_lightgbm
-from ml.main import get_preprocessor
+from data import load_preprocessed_train_target
+from features import prepare_for_catboost, prepare_for_lightgbm
+from ml.constants import CATBOOST_FIXED, LIGHTGBM_FIXED
+from ml.models import get_preprocessor
+from paths import ML_BACKUPS_DIR, ML_BEST_PARAMS_PATH, ensure_output_dirs
 
-
-PARAMS_PATH = Path(__file__).parent / "best_params.json"
-BACKUP_PATH = Path(__file__).parent / "best_params.backup.json"
-
-CATBOOST_FIXED = dict(
-    iterations=1500,
-    random_state=42,
-    verbose=False,
-    thread_count=-1,
-    od_type='Iter',
-    od_wait=30,
-    allow_writing_files=False,
-)
-
-LIGHTGBM_FIXED = dict(
-    n_estimators=2000,
-    random_state=42,
-    verbose=-1,
-    n_jobs=-1,
-)
-
-
-def prepare_data():
-    X, y, _ = load_data()
-    skew_threshold = float(cfg.preprocess.skew_threshold)
-    X, _ = preprocess(X, skew_threshold=skew_threshold)
-    y = np.log1p(y).to_numpy()
-    return X, y
+ensure_output_dirs()
+PARAMS_PATH = ML_BEST_PARAMS_PATH
+BACKUP_PATH = ML_BACKUPS_DIR / 'best_params.backup.json'
 
 
 # ============================ CatBoost ============================
@@ -107,7 +77,7 @@ def make_objective_catboost(X, y, cat_features, kf):
 
 
 def tune_catboost(n_trials: int, n_splits: int, random_state: int):
-    X, y = prepare_data()
+    X, y = load_preprocessed_train_target()
     X_cat, cat_features = prepare_for_catboost(X)
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
 
@@ -152,7 +122,7 @@ def tune_catboost(n_trials: int, n_splits: int, random_state: int):
 # ============================ Ridge ============================
 
 def tune_ridge(n_trials: int, n_splits: int, random_state: int):
-    X, y = prepare_data()
+    X, y = load_preprocessed_train_target()
     numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
     categorical_features = X.select_dtypes(include=['object']).columns
     preprocessor = get_preprocessor(numeric_features, categorical_features)
@@ -227,7 +197,7 @@ def make_objective_lightgbm(X, y, kf):
 
 
 def tune_lightgbm(n_trials: int, n_splits: int, random_state: int):
-    X, y = prepare_data()
+    X, y = load_preprocessed_train_target()
     X_lgb, _ = prepare_for_lightgbm(X)
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
 
@@ -269,12 +239,12 @@ def tune_lightgbm(n_trials: int, n_splits: int, random_state: int):
 
 def _backup_params():
     """Перед перезаписью копирует текущий best_params.json в .backup.json."""
-    if not PARAMS_PATH.exists():
+    if not ML_BEST_PARAMS_PATH.exists():
         return
-    shutil.copy2(PARAMS_PATH, BACKUP_PATH)
+    shutil.copy2(ML_BEST_PARAMS_PATH, BACKUP_PATH)
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-    timestamped = PARAMS_PATH.with_name(f"best_params.{ts}.json")
-    shutil.copy2(PARAMS_PATH, timestamped)
+    timestamped = ML_BACKUPS_DIR / f"best_params.{ts}.json"
+    shutil.copy2(ML_BEST_PARAMS_PATH, timestamped)
     print(f"Бэкап текущих параметров: {BACKUP_PATH.name} и {timestamped.name}")
 
 
@@ -286,9 +256,9 @@ def save_best_params(
     _backup_params()
 
     payload = {}
-    if PARAMS_PATH.exists():
+    if ML_BEST_PARAMS_PATH.exists():
         try:
-            payload = json.loads(PARAMS_PATH.read_text(encoding='utf-8'))
+            payload = json.loads(ML_BEST_PARAMS_PATH.read_text(encoding='utf-8'))
         except json.JSONDecodeError:
             payload = {}
 
@@ -302,8 +272,8 @@ def save_best_params(
         payload['lightgbm'] = {**LIGHTGBM_FIXED, **lightgbm_params}
         payload['lightgbm_cv_rmsle'] = lightgbm_score
 
-    PARAMS_PATH.write_text(json.dumps(payload, indent=2), encoding='utf-8')
-    print(f"Сохранено в {PARAMS_PATH}")
+    ML_BEST_PARAMS_PATH.write_text(json.dumps(payload, indent=2), encoding='utf-8')
+    print(f"Сохранено в {ML_BEST_PARAMS_PATH}")
 
 
 if __name__ == "__main__":

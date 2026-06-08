@@ -1,105 +1,28 @@
-# config.yaml
+# =============================================================================
+# ОБЩИЙ КОНФИГ (источник правды для ML и DL)
+# =============================================================================
+# Менять здесь:
+#   - paths          пути к данным и сабмитам
+#   - random_state   воспроизводимость (CV, модели, Optuna)
+#   - cv.n_splits    число фолдов для всех пайплайнов
+#   - preprocess     общий feature engineering
+#
+# НЕ менять здесь (см. ml/config.yaml и dl/config.yaml):
+#   - blend.weights  веса ML-бленда (ручные, не из тюнинга)
+#   - tune           Optuna для ML
+#   - dl.*           всё, что касается DNN
+# =============================================================================
 
 paths:
-  train: "data/train.csv"
-  test: "data/test.csv"
-  submission: "submission.csv"
-  dl_submission: "submission_dl.csv"
+  train: "data/train.csv"       # обучающая выборка Kaggle
+  test: "data/test.csv"         # тест для инференса
+  submission: "submission.csv"      # сабмит ML-пайплайна
+  dl_submission: "submission_dl.csv"  # сабмит DL-пайплайна
 
-random_state: 42
+random_state: 42  # сид для KFold, моделей, Optuna
 
 cv:
-  n_splits: 5
-
-tune:
-  n_trials: 30
+  n_splits: 5  # KFold / StratifiedKFold — общий для ML и DL
 
 preprocess:
-  skew_threshold: 0.75
-
-blend:
-  weights:
-    catboost: 0.30
-    ridge:    0.45
-    lightgbm: 0.25
-
-dl:
-  cat_encoding: "freq"
-  cv_strategy: "stratified"
-  stratify_bins: 10
-  batch_size: 64
-  n_epochs: 100
-  learning_rate: 0.001
-  patience: 15
-  device: "auto"
-  loss_fn: "mse"
-  optimizer: "adam"
-  scheduler: "cosine"
-  tune:
-    n_trials: 50
-    n_epochs: 80
-    patience: 10
-    search_space: "refined"
-  experiments:
-    - name: "baseline_2layer"
-      hidden_layers: [128, 64]
-      activation: "relu"
-      batch_norm: false
-      dropout: 0.0
-      cat_encoding: "freq"
-    - name: "deep_4layer"
-      hidden_layers: [256, 128, 64, 32]
-      activation: "relu"
-      batch_norm: false
-      dropout: 0.0
-      cat_encoding: "freq"
-    - name: "batchnorm"
-      hidden_layers: [256, 128, 64]
-      activation: "relu"
-      batch_norm: true
-      dropout: 0.0
-      cat_encoding: "freq"
-    - name: "dropout_0.2"
-      hidden_layers: [256, 128, 64]
-      activation: "relu"
-      batch_norm: true
-      dropout: 0.2
-      cat_encoding: "freq"
-    - name: "dropout_0.5"
-      hidden_layers: [256, 128, 64]
-      activation: "relu"
-      batch_norm: true
-      dropout: 0.5
-      cat_encoding: "freq"
-    - name: "elu_wide"
-      hidden_layers: [512, 256, 128]
-      activation: "elu"
-      batch_norm: true
-      dropout: 0.3
-      cat_encoding: "freq"
-    - name: "sgd_cosine"
-      hidden_layers: [256, 128, 64]
-      activation: "relu"
-      batch_norm: true
-      dropout: 0.2
-      cat_encoding: "freq"
-      optimizer: "sgd"
-      scheduler: "cosine"
-      learning_rate: 0.01
-    - name: "adamw_mse"
-      hidden_layers: [256, 128, 64]
-      activation: "relu"
-      batch_norm: true
-      dropout: 0.2
-      cat_encoding: "freq"
-      optimizer: "adamw"
-      loss_fn: "mse"
-      learning_rate: 0.0005
-      batch_size: 32
-      n_epochs: 150
-    - name: "embeddings"
-      hidden_layers: [256, 128, 64]
-      activation: "relu"
-      batch_norm: true
-      dropout: 0.2
-      cat_encoding: "embedding"
+  skew_threshold: 0.75  # порог |skew| для log1p (считается на train)

@@ -2,16 +2,14 @@
 Создание сабмита: blend CatBoost + Ridge + LightGBM на тюненных параметрах.
 
 Веса блeнда и random_state читаются из config.yaml.
-Параметры моделей — из best_params.json (если файла нет — используются дефолты).
+Параметры моделей — из outputs/ml/best_params.json (если файла нет — дефолты).
 """
 
 from __future__ import annotations
 
-import json
-import sys
 import warnings
-from pathlib import Path
 
+import bootstrap  # noqa: F401
 import numpy as np
 import pandas as pd
 from catboost import CatBoostRegressor
@@ -19,38 +17,16 @@ from lightgbm import LGBMRegressor
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
 from config import cfg
 from data import load_data
 from features import preprocess, prepare_for_catboost, prepare_for_lightgbm
-from ml.main import get_preprocessor
-
+from ml.models import get_preprocessor
+from ml.train_config import load_best_params
 
 warnings.filterwarnings('ignore', message=".*select_dtypes.*str.*")
 
-PARAMS_PATH = Path(__file__).parent / "best_params.json"
 RANDOM_STATE = int(cfg.random_state)
 BLEND_WEIGHTS = {k: float(v) for k, v in cfg.blend.weights.items()}
-
-
-def load_best_params() -> tuple[dict, dict, dict]:
-    if not PARAMS_PATH.exists():
-        print("best_params.json не найден — использую дефолтные параметры")
-        return {}, {}, {}
-    payload = json.loads(PARAMS_PATH.read_text(encoding='utf-8'))
-    cb = payload.get('catboost', {})
-    rg = payload.get('ridge', {})
-    lg = payload.get('lightgbm', {})
-    if 'catboost_cv_rmsle' in payload:
-        print(f"CatBoost: тюненные (CV RMSLE = {payload['catboost_cv_rmsle']:.4f})")
-    if 'ridge_cv_rmsle' in payload:
-        print(f"Ridge:    тюненный  (CV RMSLE = {payload['ridge_cv_rmsle']:.4f})")
-    if 'lightgbm_cv_rmsle' in payload:
-        print(f"LightGBM: тюненные (CV RMSLE = {payload['lightgbm_cv_rmsle']:.4f})")
-    return cb, rg, lg
 
 
 def _train_catboost(X_train, y_log, X_test, params):

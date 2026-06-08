@@ -15,7 +15,13 @@ from torch.utils.data import DataLoader, Dataset
 
 @dataclass
 class FeatureEncoder:
-    """Кодирует числовые (impute + scale) и категориальные (label encoding) признаки."""
+    """
+    Кодирует числовые (impute + scale) и категориальные признаки для DNN.
+
+    cat_encoding задаёт способ обработки категорий (см. TrainConfig):
+    embedding → индексы для Embedding; onehot/freq/target → признаки
+    добавляются к числовому входу.
+    """
 
     numeric_cols: list[str]
     categorical_cols: list[str]

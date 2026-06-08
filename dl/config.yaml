@@ -1,0 +1,116 @@
+# =============================================================================
+# DL-КОНФИГ
+# =============================================================================
+# Секция dl — гиперпараметры DNN и список экспериментов (dl/main.py).
+#
+# dl.tune — Optuna-тюнинг (dl/tune.py). Лучшие параметры → dl/best_params.json.
+# dl.experiments — ручные эксперименты для сравнения архитектур/регуляризации.
+#   Каждый блок переопределяет дефолты из dl.* (см. build_train_config_from_yaml).
+#
+# cat_encoding — как кодируются категориальные признаки:
+#   embedding | onehot | freq | target
+# =============================================================================
+
+dl:
+  # --- дефолты обучения (переопределяются в experiments и best_params.json) ---
+  cat_encoding: "freq"
+  cv_strategy: "stratified"   # stratified = KFold по квантильным бинам y_log
+  stratify_bins: 10
+  batch_size: 64
+  n_epochs: 100
+  learning_rate: 0.001
+  patience: 15
+  device: "auto"              # auto | cpu | cuda
+  loss_fn: "mse"
+  optimizer: "adam"
+  scheduler: "cosine"
+
+  # --- Optuna (dl/tune.py) ---
+  tune:
+    n_trials: 50
+    n_epochs: 80      # эпох на trial (меньше, чем dl.n_epochs — быстрее тюнинг)
+    patience: 10
+    search_space: "refined"  # refined | wide (см. dl/constants.py)
+
+  # --- эксперименты для dl/main.py (учебные сценарии из ТЗ) ---
+  experiments:
+
+    # 1. Простая 2-слойная MLP
+    - name: "baseline_2layer"
+      hidden_layers: [128, 64]
+      activation: "relu"
+      batch_norm: false
+      dropout: 0.0
+      cat_encoding: "freq"
+
+    # 2. Больше слоёв
+    - name: "deep_4layer"
+      hidden_layers: [256, 128, 64, 32]
+      activation: "relu"
+      batch_norm: false
+      dropout: 0.0
+      cat_encoding: "freq"
+
+    # 3. BatchNorm
+    - name: "batchnorm"
+      hidden_layers: [256, 128, 64]
+      activation: "relu"
+      batch_norm: true
+      dropout: 0.0
+      cat_encoding: "freq"
+
+    # 4. Dropout 0.2
+    - name: "dropout_0.2"
+      hidden_layers: [256, 128, 64]
+      activation: "relu"
+      batch_norm: true
+      dropout: 0.2
+      cat_encoding: "freq"
+
+    # 5. Dropout 0.5
+    - name: "dropout_0.5"
+      hidden_layers: [256, 128, 64]
+      activation: "relu"
+      batch_norm: true
+      dropout: 0.5
+      cat_encoding: "freq"
+
+    # 6. Другие размеры слоёв и активация ELU
+    - name: "elu_wide"
+      hidden_layers: [512, 256, 128]
+      activation: "elu"
+      batch_norm: true
+      dropout: 0.3
+      cat_encoding: "freq"
+
+    # 7. Другой оптимизатор + косинусовый scheduler
+    - name: "sgd_cosine"
+      hidden_layers: [256, 128, 64]
+      activation: "relu"
+      batch_norm: true
+      dropout: 0.2
+      cat_encoding: "freq"
+      optimizer: "sgd"
+      scheduler: "cosine"
+      learning_rate: 0.01
+
+    # 8. Другие LR, batch_size, n_epochs, loss_fn
+    - name: "adamw_mse"
+      hidden_layers: [256, 128, 64]
+      activation: "relu"
+      batch_norm: true
+      dropout: 0.2
+      cat_encoding: "freq"
+      optimizer: "adamw"
+      loss_fn: "mse"
+      learning_rate: 0.0005
+      batch_size: 32
+      n_epochs: 150
+
+    # 9. Embedding для категориальных фичей (задание со звёздочкой)
+    - name: "embeddings"
+      hidden_layers: [256, 128, 64]
+      activation: "relu"
+      batch_norm: true
+      dropout: 0.2
+      cat_encoding: "embedding"

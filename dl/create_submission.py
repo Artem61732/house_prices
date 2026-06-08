@@ -1,32 +1,28 @@
 """
 Создание сабмита на DNN-модели.
 
-По умолчанию используются параметры из dl/best_params.json (после tune).
-Можно указать эксперимент из config.yaml через --experiment.
+По умолчанию используются параметры из outputs/dl/best_params.json (после tune).
+Можно указать эксперимент из dl/config.yaml через --experiment.
 """
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
+import bootstrap  # noqa: F401
 import numpy as np
 import pandas as pd
-from omegaconf import OmegaConf
-
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 from config import cfg
 from data import load_data
 from features import preprocess, prepare_for_dl
-from dl.main import _build_train_config
+from dl.train_config import (
+    build_train_config_from_json,
+    build_train_config_from_yaml,
+    load_tuned_params,
+)
 from dl.train import fit_full_model, predict
-from dl.tune import dict_to_train_config, load_tuned_params
 
 
-def _resolve_train_config(use_tuned: bool, experiment_name: str | None):
+def resolve_train_config(use_tuned: bool, experiment_name: str | None):
     dl_cfg = cfg.dl
 
     if use_tuned:
@@ -34,7 +30,7 @@ def _resolve_train_config(use_tuned: bool, experiment_name: str | None):
         if tuned_params:
             if cv_rmsle is not None:
                 print(f"DNN: тюненные параметры (CV RMSLE = {cv_rmsle:.4f})")
-            return dict_to_train_config(tuned_params, dl_cfg)
+            return build_train_config_from_json(tuned_params, dl_cfg)
 
     if experiment_name is None:
         experiment_name = 'embeddings'
@@ -46,19 +42,7 @@ def _resolve_train_config(use_tuned: bool, experiment_name: str | None):
             f"Эксперимент '{experiment_name}' не найден. Доступны: {available}"
         )
 
-    dl_defaults = OmegaConf.create({
-        'cat_encoding': dl_cfg.get('cat_encoding', 'freq'),
-        'cv_strategy': dl_cfg.get('cv_strategy', 'stratified'),
-        'stratify_bins': dl_cfg.get('stratify_bins', 10),
-        'batch_size': dl_cfg.batch_size,
-        'n_epochs': dl_cfg.n_epochs,
-        'learning_rate': dl_cfg.learning_rate,
-        'patience': dl_cfg.patience,
-        'loss_fn': dl_cfg.loss_fn,
-        'optimizer': dl_cfg.optimizer,
-        'scheduler': dl_cfg.scheduler,
-    })
-    return _build_train_config(experiments[experiment_name], dl_defaults)
+    return build_train_config_from_yaml(experiments[experiment_name], dl_cfg)
 
 
 def create_submission(use_tuned: bool = True, experiment_name: str | None = None):
@@ -66,7 +50,7 @@ def create_submission(use_tuned: bool = True, experiment_name: str | None = None
     device_cfg = str(dl_cfg.get('device', 'auto'))
     random_state = int(cfg.random_state)
 
-    train_cfg = _resolve_train_config(use_tuned, experiment_name)
+    train_cfg = resolve_train_config(use_tuned, experiment_name)
 
     print(f"=== СОЗДАНИЕ DL-САБМИТА (модель: {train_cfg.name}) ===")
 
@@ -107,11 +91,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--experiment', default=None,
-        help="Имя эксперимента из config.yaml (игнорирует --tuned)",
+        help="Имя эксперимента из dl/config.yaml (игнорирует --tuned)",
     )
     parser.add_argument(
         '--tuned', action='store_true', default=True,
-        help="Использовать dl/best_params.json (по умолчанию: да)",
+        help="Использовать outputs/dl/best_params.json (по умолчанию: да)",
     )
     parser.add_argument(
         '--no-tuned', dest='tuned', action='store_false',

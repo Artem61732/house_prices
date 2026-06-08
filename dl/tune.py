@@ -3,78 +3,50 @@
 
 - Stratified CV (квантильные бины log-таргета) => RMSLE = RMSE на log1p(SalePrice).
 - Pruning после каждого фолда (MedianPruner).
-- Лучшие гиперпараметры сохраняются в dl/best_params.json и подхватываются
-  dl/create_submission.py (--tuned по умолчанию).
+- Лучшие гиперпараметры сохраняются в outputs/dl/best_params.json.
 """
 
 from __future__ import annotations
 
 import json
 import shutil
-import sys
 import time
 from datetime import datetime
-from pathlib import Path
 
+import bootstrap  # noqa: F401
 import numpy as np
 import optuna
 from sklearn.model_selection import StratifiedKFold
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
 from config import cfg
-from data import load_data
-from features import preprocess, prepare_for_dl
+from data import load_preprocessed_dl_train_target
+from paths import DL_BACKUPS_DIR, DL_BEST_PARAMS_PATH, ensure_output_dirs
+from dl.train_config import TrainConfig, train_config_to_dict
+from dl.constants import (
+    REFINED_ACTIVATIONS,
+    REFINED_ARCHITECTURES,
+    REFINED_BATCH_SIZES,
+    REFINED_CAT_ENCODINGS,
+    REFINED_LOSS_FNS,
+    REFINED_OPTIMIZERS,
+    REFINED_SCHEDULERS,
+    SEARCH_SPACES,
+    WIDE_ACTIVATIONS,
+    WIDE_BATCH_SIZES,
+    WIDE_CAT_ENCODINGS,
+    WIDE_HIDDEN_WIDTHS,
+    WIDE_LOSS_FNS,
+    WIDE_OPTIMIZERS,
+    WIDE_SCHEDULERS,
+)
 from dl.train import (
-    TrainConfig,
     _make_stratify_bins,
     build_cv_splitter,
     train_one_fold,
 )
 
-
-PARAMS_PATH = Path(__file__).parent / "best_params.json"
-BACKUP_PATH = Path(__file__).parent / "best_params.backup.json"
-
-# --- refined search space (по результатам первого раунда тюнинга) ---
-REFINED_CAT_ENCODINGS = ['onehot', 'target']
-REFINED_OPTIMIZERS = ['adam']
-REFINED_SCHEDULERS = ['cosine', 'none']
-REFINED_LOSS_FNS = ['mae', 'huber']
-REFINED_ACTIVATIONS = ['elu', 'gelu']
-REFINED_BATCH_SIZES = [32, 64]
-REFINED_ARCHITECTURES: dict[str, list[int]] = {
-    '256_512_512': [256, 512, 512],
-    '256_512_256': [256, 512, 256],
-    '256_256_512': [256, 256, 512],
-    '512_512_256': [512, 512, 256],
-    '512_256_512': [512, 256, 512],
-    '128_512_512': [128, 512, 512],
-    '256_512_128': [256, 512, 128],
-    '512_512_512': [512, 512, 512],
-}
-
-# --- wide search space (первый раунд / exploratory) ---
-WIDE_CAT_ENCODINGS = ['embedding', 'onehot', 'freq', 'target']
-WIDE_OPTIMIZERS = ['adam', 'adamw', 'sgd', 'rmsprop']
-WIDE_SCHEDULERS = ['cosine', 'step', 'plateau', 'none']
-WIDE_LOSS_FNS = ['mse', 'mae', 'huber']
-WIDE_ACTIVATIONS = ['relu', 'elu', 'gelu', 'leaky_relu']
-WIDE_BATCH_SIZES = [32, 64, 128]
-WIDE_HIDDEN_WIDTHS = [64, 128, 256, 512]
-
-SEARCH_SPACES = {'refined', 'wide'}
-
-
-def prepare_data():
-    X, y, _ = load_data()
-    skew_threshold = float(cfg.preprocess.skew_threshold)
-    X, _ = preprocess(X, skew_threshold=skew_threshold)
-    y_log = np.log1p(y).to_numpy()
-    numeric_cols, categorical_cols = prepare_for_dl(X)
-    return X, y_log, numeric_cols, categorical_cols
+ensure_output_dirs()
+BACKUP_PATH = DL_BACKUPS_DIR / 'best_params.backup.json'
 
 
 def _sample_hidden_layers_wide(trial: optuna.Trial) -> list[int]:
@@ -136,62 +108,6 @@ def trial_to_train_config(
         scheduler=None if scheduler == 'none' else scheduler,
         weight_decay=trial.suggest_float('weight_decay', 1e-6, 1e-2, log=True),
     )
-
-
-def train_config_to_dict(cfg_obj: TrainConfig) -> dict:
-    return {
-        'hidden_layers': cfg_obj.hidden_layers,
-        'activation': cfg_obj.activation,
-        'batch_norm': cfg_obj.batch_norm,
-        'dropout': cfg_obj.dropout,
-        'cat_encoding': cfg_obj.cat_encoding,
-        'batch_size': cfg_obj.batch_size,
-        'n_epochs': cfg_obj.n_epochs,
-        'learning_rate': cfg_obj.learning_rate,
-        'patience': cfg_obj.patience,
-        'loss_fn': cfg_obj.loss_fn,
-        'optimizer': cfg_obj.optimizer,
-        'scheduler': cfg_obj.scheduler,
-        'weight_decay': cfg_obj.weight_decay,
-        'cv_strategy': cfg_obj.cv_strategy,
-        'stratify_bins': cfg_obj.stratify_bins,
-    }
-
-
-def dict_to_train_config(params: dict, dl_cfg) -> TrainConfig:
-    """Собирает TrainConfig из сохранённого JSON + дефолтов dl-секции."""
-    merged = {
-        'name': 'tuned',
-        'cat_encoding': dl_cfg.get('cat_encoding', 'freq'),
-        'cv_strategy': dl_cfg.get('cv_strategy', 'stratified'),
-        'stratify_bins': int(dl_cfg.get('stratify_bins', 10)),
-        'batch_size': int(dl_cfg.batch_size),
-        'n_epochs': int(dl_cfg.n_epochs),
-        'learning_rate': float(dl_cfg.learning_rate),
-        'patience': int(dl_cfg.patience),
-        'loss_fn': str(dl_cfg.loss_fn),
-        'optimizer': str(dl_cfg.optimizer),
-        'scheduler': dl_cfg.get('scheduler'),
-        'weight_decay': 0.0,
-        'hidden_layers': [128, 64],
-        'activation': 'relu',
-        'batch_norm': True,
-        'dropout': 0.0,
-    }
-    merged.update(params)
-    if merged.get('scheduler') == 'none':
-        merged['scheduler'] = None
-    return TrainConfig(**merged)
-
-
-def load_tuned_params() -> tuple[dict, float | None]:
-    if not PARAMS_PATH.exists():
-        return {}, None
-    try:
-        payload = json.loads(PARAMS_PATH.read_text(encoding='utf-8'))
-    except json.JSONDecodeError:
-        return {}, None
-    return payload.get('dnn', {}), payload.get('dnn_cv_rmsle')
 
 
 def make_objective(
@@ -270,7 +186,7 @@ def tune_dnn(
     patience: int | None = None,
     search_space: str = 'refined',
 ) -> tuple[dict, float]:
-    X, y, numeric_cols, categorical_cols = prepare_data()
+    X, y, numeric_cols, categorical_cols = load_preprocessed_dl_train_target()
     dl_cfg = cfg.dl
     device_cfg = str(dl_cfg.get('device', 'auto'))
     tune_cfg = dl_cfg.get('tune', {})
@@ -334,27 +250,27 @@ def tune_dnn(
 
 
 def _backup_params():
-    if not PARAMS_PATH.exists():
+    if not DL_BEST_PARAMS_PATH.exists():
         return
-    shutil.copy2(PARAMS_PATH, BACKUP_PATH)
+    shutil.copy2(DL_BEST_PARAMS_PATH, BACKUP_PATH)
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-    timestamped = PARAMS_PATH.with_name(f"best_params.{ts}.json")
-    shutil.copy2(PARAMS_PATH, timestamped)
+    timestamped = DL_BACKUPS_DIR / f"best_params.{ts}.json"
+    shutil.copy2(DL_BEST_PARAMS_PATH, timestamped)
     print(f"Бэкап: {BACKUP_PATH.name}, {timestamped.name}")
 
 
 def save_best_params(dnn_params: dict, dnn_score: float):
     _backup_params()
     payload = {}
-    if PARAMS_PATH.exists():
+    if DL_BEST_PARAMS_PATH.exists():
         try:
-            payload = json.loads(PARAMS_PATH.read_text(encoding='utf-8'))
+            payload = json.loads(DL_BEST_PARAMS_PATH.read_text(encoding='utf-8'))
         except json.JSONDecodeError:
             payload = {}
     payload['dnn'] = dnn_params
     payload['dnn_cv_rmsle'] = dnn_score
-    PARAMS_PATH.write_text(json.dumps(payload, indent=2), encoding='utf-8')
-    print(f"Сохранено в {PARAMS_PATH}")
+    DL_BEST_PARAMS_PATH.write_text(json.dumps(payload, indent=2), encoding='utf-8')
+    print(f"Сохранено в {DL_BEST_PARAMS_PATH}")
 
 
 if __name__ == "__main__":
