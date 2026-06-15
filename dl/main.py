@@ -6,31 +6,49 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 import bootstrap  # noqa: F401
 import numpy as np
 
 from config import cfg
 from data import load_preprocessed_dl_train_target
-from dl.train_config import build_train_config_from_yaml
+from dl.results import save_dl_results
+from dl.train_config import TrainConfig, build_train_config_from_yaml
 from dl.train import cross_validate
+
+
+def _apply_quick_overrides(train_cfg: TrainConfig) -> TrainConfig:
+    cfg_copy = deepcopy(train_cfg)
+    cfg_copy.n_epochs = min(cfg_copy.n_epochs, 30)
+    cfg_copy.patience = min(cfg_copy.patience, 8)
+    return cfg_copy
 
 
 def evaluate_dnn_experiments(
     experiment_names: list[str] | None = None,
     n_splits: int | None = None,
     random_state: int | None = None,
+    *,
+    quick: bool = False,
+    save: bool = True,
 ):
     """
     Запускает KFold CV для списка DNN-экспериментов из dl/config.yaml.
 
     experiment_names — подмножество имён; None — все эксперименты.
+    quick — только baseline_2layer, 3 фолда, меньше эпох.
     """
-    n_splits = n_splits or int(cfg.cv.n_splits)
+    n_splits = n_splits or (3 if quick else int(cfg.cv.n_splits))
     random_state = random_state or int(cfg.random_state)
     dl_cfg = cfg.dl
     device_cfg = str(dl_cfg.get('device', 'auto'))
 
-    print(f"=== ОЦЕНКА DNN (KFold, {n_splits} фолдов) ===")
+    if quick and experiment_names is None:
+        experiment_names = ['baseline_2layer']
+
+    print(f"=== ОЦЕНКА DNN (KFold, {n_splits} фолдов"
+          f"{', quick' if quick else ''}) ===")
 
     X, y_log, numeric_cols, categorical_cols = load_preprocessed_dl_train_target()
     print(
@@ -48,6 +66,9 @@ def evaluate_dnn_experiments(
     results = []
     for exp in experiments:
         train_cfg = build_train_config_from_yaml(exp, dl_cfg)
+        if quick:
+            train_cfg = _apply_quick_overrides(train_cfg)
+
         print(f"\n--- {train_cfg.name} ---")
         print(
             f"  layers={train_cfg.hidden_layers}, act={train_cfg.activation}, "
@@ -80,6 +101,9 @@ def evaluate_dnn_experiments(
             f"± {r['rmsle_std']:.4f}"
         )
 
+    if save and results:
+        save_dl_results(results)
+
     return results
 
 
@@ -91,5 +115,11 @@ if __name__ == "__main__":
         '--experiments', nargs='+', default=None,
         help="Имена экспериментов из dl/config.yaml (по умолчанию — все)",
     )
+    parser.add_argument('--quick', action='store_true')
+    parser.add_argument('--no-save', action='store_true')
     args = parser.parse_args()
-    evaluate_dnn_experiments(experiment_names=args.experiments)
+    evaluate_dnn_experiments(
+        experiment_names=args.experiments,
+        quick=args.quick,
+        save=not args.no_save,
+    )

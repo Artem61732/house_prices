@@ -36,15 +36,18 @@ def get_preprocessor(numeric_features, categorical_features):
     ])
 
 
-def get_sklearn_models(ridge_params: dict | None = None):
+def get_sklearn_models(ridge_params: dict | None = None, *, quick: bool = False):
     """Модели через общий препроцессор (impute + scale + OHE)."""
     ridge_kwargs = {'random_state': RANDOM_STATE, **(ridge_params or {})}
-    return {
+    models = {
         'Linear Regression': LinearRegression(),
         'Ridge': Ridge(**ridge_kwargs),
         'Random Forest': RandomForestRegressor(random_state=RANDOM_STATE),
         'XGBoost': XGBRegressor(random_state=RANDOM_STATE),
     }
+    if quick:
+        return {k: models[k] for k in ('Linear Regression', 'Ridge')}
+    return models
 
 
 def get_catboost_model(cat_features, params: dict | None = None):

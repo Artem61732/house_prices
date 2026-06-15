@@ -22,6 +22,7 @@ from ml.models import (
     get_preprocessor,
     get_sklearn_models,
 )
+from ml.results import build_ml_validation_report, save_results, save_validation_report
 from ml.train_config import load_tuned_params
 
 warnings.filterwarnings('ignore', message=".*select_dtypes.*str.*")
@@ -29,9 +30,19 @@ warnings.filterwarnings('ignore', message=".*select_dtypes.*str.*")
 RANDOM_STATE = int(cfg.random_state)
 
 
-def run_evaluation(n_splits: int = 5, random_state: int = RANDOM_STATE):
+def run_evaluation(
+    n_splits: int | None = None,
+    random_state: int = RANDOM_STATE,
+    *,
+    quick: bool = False,
+    save: bool = True,
+):
     """KFold CV для всех ML-моделей и blend; возвращает словарь метрик."""
-    print(f"=== ОЦЕНКА МОДЕЛЕЙ (KFold, {n_splits} фолдов) ===")
+    if n_splits is None:
+        n_splits = 3 if quick else int(cfg.cv.n_splits)
+
+    print(f"=== ОЦЕНКА МОДЕЛЕЙ (KFold, {n_splits} фолдов"
+          f"{', quick' if quick else ''}) ===")
     X, y, _ = load_data()
 
     skew_threshold = float(cfg.preprocess.skew_threshold)
@@ -51,12 +62,13 @@ def run_evaluation(n_splits: int = 5, random_state: int = RANDOM_STATE):
 
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
     results = {}
+    blend_info = None
 
     numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
     categorical_features = X.select_dtypes(include='object').columns
     preprocessor = get_preprocessor(numeric_features, categorical_features)
 
-    for name, model in get_sklearn_models(ridge_params=ridge_params).items():
+    for name, model in get_sklearn_models(ridge_params=ridge_params, quick=quick).items():
         pipeline = Pipeline([('preprocessor', preprocessor), ('model', model)])
         m = cv_evaluate_sklearn(pipeline, X, y_log, kf)
         print_metrics(name, m)
@@ -81,28 +93,28 @@ def run_evaluation(n_splits: int = 5, random_state: int = RANDOM_STATE):
     blend_keys = ('Ridge', 'CatBoost (native)', 'LightGBM (native)')
     if all(k in results for k in blend_keys):
         oof_preds = {k: results[k]['y_pred_log'] for k in blend_keys}
-        info = find_blend_weights(oof_preds, y_arr, step=0.1)
+        blend_info = find_blend_weights(oof_preds, y_arr, step=0.1)
 
         print("--- Blend (Ridge + CatBoost + LightGBM на OOF) ---")
         print(
-            f"  1/{len(info['names'])} each   "
-            f"-> RMSLE = {info['equal_score']:.4f}"
+            f"  1/{len(blend_info['names'])} each   "
+            f"-> RMSLE = {blend_info['equal_score']:.4f}"
         )
-        bw = info['best_weights']
-        bn = info['names']
+        bw = blend_info['best_weights']
+        bn = blend_info['names']
         print(
             "  best " + " + ".join(f"{w:.2f} {n}" for w, n in zip(bw, bn))
-            + f"  -> RMSLE = {info['best_score']:.4f}"
+            + f"  -> RMSLE = {blend_info['best_score']:.4f}"
         )
         print("  топ-5 комбинаций:")
-        for weights, score in info['top5']:
+        for weights, score in blend_info['top5']:
             ws = " ".join(f"{n}={w:.2f}" for n, w in zip(bn, weights))
             print(f"    {ws}  -> RMSLE = {score:.4f}")
         print()
 
-        results['Blend equal'] = {'rmsle_mean': info['equal_score']}
+        results['Blend equal'] = {'rmsle_mean': blend_info['equal_score']}
         results[f'Blend best ({", ".join(f"{w:.2f}" for w in bw)})'] = {
-            'rmsle_mean': info['best_score'],
+            'rmsle_mean': blend_info['best_score'],
         }
 
     print("=== ИТОГИ (отсортировано по RMSLE) ===")
@@ -112,8 +124,25 @@ def run_evaluation(n_splits: int = 5, random_state: int = RANDOM_STATE):
         else:
             print(f"{name:50s}  RMSLE = {m['rmsle_mean']:.4f}")
 
+    if save:
+        save_results(results, pipeline='ml')
+        save_validation_report(build_ml_validation_report(
+            results,
+            n_splits=n_splits,
+            random_state=random_state,
+            skewed_cols=skewed_cols,
+            blend_info=blend_info,
+            quick=quick,
+        ))
+
     return results
 
 
 if __name__ == "__main__":
-    run_evaluation(n_splits=int(cfg.cv.n_splits), random_state=RANDOM_STATE)
+    import argparse
+
+    parser = argparse.ArgumentParser(description='ML CV (House Prices)')
+    parser.add_argument('--quick', action='store_true')
+    parser.add_argument('--no-save', action='store_true')
+    args = parser.parse_args()
+    run_evaluation(quick=args.quick, save=not args.no_save)

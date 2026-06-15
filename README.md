@@ -10,14 +10,30 @@ pip install -r requirements.txt
 python main.py
 ```
 
-`python main.py` — KFold CV всех ML-моделей и blend-сабмит → `submission.csv`.
+`python main.py` — ML: KFold CV + blend-сабмит → `submission.csv` + артефакты в `outputs/ml/`.
 
 ```bash
-python main.py --cv-only    # только CV
-python main.py --sub-only   # только сабмит
+python main.py --quick              # быстрый ML (3 фолда, Ridge + бустинги)
+python main.py --pipeline dl          # DL: CV + сабмит
+python main.py --pipeline all         # ML + DL
+python main.py --pipeline all --quick
+python main.py --cv-only              # только CV, без сабмитов
+python main.py --sub-only             # только сабмиты
 ```
 
 Без `outputs/ml/best_params.json` модели обучаются с дефолтными гиперпараметрами. Для тюнинга: `python -m ml.tune`.
+
+### Артефакты после прогона
+
+| Файл | Описание |
+|------|----------|
+| `outputs/ml/results.csv` | CV-метрики всех ML-моделей |
+| `outputs/ml/results.json` | то же в JSON |
+| `outputs/ml/validation_report.json` | лучшая модель, leaderboard, веса blend |
+| `outputs/dl/results.csv` | CV-метрики DNN-экспериментов |
+| `outputs/dl/results.json` | то же в JSON |
+| `submission.csv` | ML-сабмит |
+| `submission_dl.csv` | DL-сабмит |
 
 Все команды ниже — из корня репозитория.
 
@@ -31,6 +47,7 @@ python main.py --sub-only   # только сабмит
 | Тюнинг Optuna | `python -m ml.tune --models catboost ridge lightgbm` |
 
 ```bash
+python -m ml.main --quick
 python -m ml.tune --models lightgbm --n-trials 50   # по умолчанию тюнится только lightgbm
 ```
 
@@ -38,15 +55,16 @@ python -m ml.tune --models lightgbm --n-trials 50   # по умолчанию т
 
 | Задача | Команда |
 |--------|---------|
-| CV экспериментов | `python -m dl.main` |
-| Сабмит | `python -m dl.create_submission` |
+| CV + сабмит | `python main.py --pipeline dl` |
+| Только CV | `python -m dl.main` |
+| Только сабмит | `python -m dl.create_submission` |
 | Тюнинг Optuna | `python -m dl.tune` |
 
 ```bash
+python -m dl.main --quick
 python -m dl.main --experiments baseline_2layer embeddings
 python -m dl.create_submission --no-tuned --experiment embeddings
 python -m dl.tune --n-trials 10 --n-epochs 40 --patience 8
-python -m dl.tune --search-space wide --n-trials 30
 ```
 
 Сабмиты: `submission.csv` (ML), `submission_dl.csv` (DL).
@@ -102,12 +120,14 @@ house_prices/
 ├── ml/
 │   ├── config.yaml      # blend.weights, tune.n_trials
 │   ├── main.py          # CV всех моделей
+│   ├── results.py       # сохранение results.csv / validation_report.json
 │   ├── create_submission.py
 │   ├── tune.py
 │   ├── models.py, cv.py, blend.py, train_config.py, constants.py
 └── dl/
     ├── config.yaml      # dl.*, experiments, dl.tune
     ├── main.py          # CV экспериментов
+    ├── results.py       # сохранение results.csv
     ├── create_submission.py
     ├── tune.py
     ├── model.py, dataset.py, train.py, train_config.py, constants.py
