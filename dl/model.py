@@ -27,7 +27,7 @@ class HousePriceMLP(nn.Module):
     Поддерживает:
     - произвольное число скрытых слоёв;
     - BatchNorm и Dropout;
-    - Embedding для категориальных признаков (задание со звёздочкой).
+    - Embedding для категориальных признаков.
     """
 
     def __init__(
@@ -58,7 +58,7 @@ class HousePriceMLP(nn.Module):
                 embed_out += dim
 
         input_dim = n_numeric + embed_out
-        act_cls = ACTIVATIONS.get(activation, nn.ReLU)
+        act_cls = ACTIVATIONS[activation]
 
         layers: list[nn.Module] = []
         prev = input_dim

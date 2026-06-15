@@ -67,6 +67,7 @@ def trial_to_train_config(
     base: TrainConfig,
     search_space: str = 'refined',
 ) -> TrainConfig:
+    """Собирает TrainConfig из гиперпараметров Optuna-trial."""
     search_space = search_space.lower()
     if search_space == 'refined':
         scheduler = trial.suggest_categorical('scheduler', REFINED_SCHEDULERS)
@@ -121,6 +122,7 @@ def make_objective(
     device_cfg: str,
     search_space: str = 'refined',
 ):
+    """Фабрика Optuna-objective для DNN с Stratified KFold CV."""
     from dl.train import get_device
 
     device = get_device(device_cfg)
@@ -186,6 +188,7 @@ def tune_dnn(
     patience: int | None = None,
     search_space: str = 'refined',
 ) -> tuple[dict, float]:
+    """Optuna-тюнинг DNN; возвращает (best_params, best_cv_rmsle)."""
     X, y, numeric_cols, categorical_cols = load_preprocessed_dl_train_target()
     dl_cfg = cfg.dl
     device_cfg = str(dl_cfg.get('device', 'auto'))
@@ -260,6 +263,7 @@ def _backup_params():
 
 
 def save_best_params(dnn_params: dict, dnn_score: float):
+    """Сохраняет лучшие гиперпараметры DNN в outputs/dl/best_params.json."""
     _backup_params()
     payload = {}
     if DL_BEST_PARAMS_PATH.exists():

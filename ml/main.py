@@ -30,6 +30,7 @@ RANDOM_STATE = int(cfg.random_state)
 
 
 def run_evaluation(n_splits: int = 5, random_state: int = RANDOM_STATE):
+    """KFold CV для всех ML-моделей и blend; возвращает словарь метрик."""
     print(f"=== ОЦЕНКА МОДЕЛЕЙ (KFold, {n_splits} фолдов) ===")
     X, y, _ = load_data()
 
@@ -99,22 +100,17 @@ def run_evaluation(n_splits: int = 5, random_state: int = RANDOM_STATE):
             print(f"    {ws}  -> RMSLE = {score:.4f}")
         print()
 
-        results['Blend equal'] = {
-            'rmsle_mean': info['equal_score'], 'rmsle_std': 0.0,
-            'rmsle_folds': np.array([info['equal_score']]),
-            'mae': float('nan'), 'r2': float('nan'),
-            'y_pred_log': None,
-        }
+        results['Blend equal'] = {'rmsle_mean': info['equal_score']}
         results[f'Blend best ({", ".join(f"{w:.2f}" for w in bw)})'] = {
-            'rmsle_mean': info['best_score'], 'rmsle_std': 0.0,
-            'rmsle_folds': np.array([info['best_score']]),
-            'mae': float('nan'), 'r2': float('nan'),
-            'y_pred_log': None,
+            'rmsle_mean': info['best_score'],
         }
 
     print("=== ИТОГИ (отсортировано по RMSLE) ===")
     for name, m in sorted(results.items(), key=lambda kv: kv[1]['rmsle_mean']):
-        print(f"{name:50s}  RMSLE = {m['rmsle_mean']:.4f} ± {m['rmsle_std']:.4f}")
+        if 'rmsle_std' in m:
+            print(f"{name:50s}  RMSLE = {m['rmsle_mean']:.4f} ± {m['rmsle_std']:.4f}")
+        else:
+            print(f"{name:50s}  RMSLE = {m['rmsle_mean']:.4f}")
 
     return results
 

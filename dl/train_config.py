@@ -1,16 +1,11 @@
 """
 TrainConfig и сборка конфигурации DNN.
-
-- TrainConfig                  — dataclass гиперпараметров
-- build_train_config_from_yaml — эксперимент из dl/config.yaml
-- build_train_config_from_json — параметры из outputs/dl/best_params.json
-- load_tuned_params            — чтение best_params.json
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, fields, field
 
 from omegaconf import OmegaConf
 
@@ -23,15 +18,7 @@ PARAMS_PATH = DL_BEST_PARAMS_PATH
 
 @dataclass
 class TrainConfig:
-    """
-    Гиперпараметры обучения DNN.
-
-    cat_encoding — способ кодирования категориальных признаков:
-      - embedding: отдельные Embedding-слои в MLP
-      - onehot:    OneHotEncoder, конкатенация с числовыми
-      - freq:      частота категории в train
-      - target:    сглаженное среднее log-таргета по категории (fit на train-фолде)
-    """
+    """Гиперпараметры одного DNN-эксперимента или тюненной модели."""
 
     name: str = 'default'
     hidden_layers: list[int] = field(default_factory=lambda: [128, 64])
@@ -51,46 +38,18 @@ class TrainConfig:
     weight_decay: float = 0.0
 
 
-def get_dl_defaults(dl_cfg=None) -> OmegaConf:
-    """Базовые гиперпараметры DL из dl/config.yaml."""
-    dl_cfg = dl_cfg or cfg.dl
-    return OmegaConf.create({
-        'cat_encoding': dl_cfg.get('cat_encoding', 'freq'),
-        'cv_strategy': dl_cfg.get('cv_strategy', 'stratified'),
-        'stratify_bins': dl_cfg.get('stratify_bins', 10),
-        'batch_size': dl_cfg.batch_size,
-        'n_epochs': dl_cfg.n_epochs,
-        'learning_rate': dl_cfg.learning_rate,
-        'patience': dl_cfg.patience,
-        'loss_fn': dl_cfg.loss_fn,
-        'optimizer': dl_cfg.optimizer,
-        'scheduler': dl_cfg.scheduler,
-    })
-
-
 def _normalize_scheduler(scheduler) -> str | None:
     if scheduler is None or scheduler == 'none':
         return None
     return scheduler
 
 
-def build_train_config_from_yaml(exp_cfg, dl_cfg=None) -> TrainConfig:
-    """Собирает TrainConfig из записи dl.experiments + дефолтов dl-секции."""
-    merged = OmegaConf.merge(get_dl_defaults(dl_cfg), exp_cfg)
-    params = OmegaConf.to_container(merged, resolve=True)
-    for key in ('experiments', 'device', 'tune'):
-        params.pop(key, None)
-    params['scheduler'] = _normalize_scheduler(params.get('scheduler'))
-    return TrainConfig(**params)
-
-
-def build_train_config_from_json(params: dict, dl_cfg=None) -> TrainConfig:
-    """Собирает TrainConfig из сохранённого JSON (после Optuna-тюнинга)."""
+def _dl_defaults_dict(dl_cfg=None) -> dict:
     dl_cfg = dl_cfg or cfg.dl
-    merged = {
-        'name': 'tuned',
-        'cat_encoding': dl_cfg.get('cat_encoding', 'freq'),
-        'cv_strategy': dl_cfg.get('cv_strategy', 'stratified'),
+    return {
+        'name': 'default',
+        'cat_encoding': str(dl_cfg.get('cat_encoding', 'freq')),
+        'cv_strategy': str(dl_cfg.get('cv_strategy', 'stratified')),
         'stratify_bins': int(dl_cfg.get('stratify_bins', 10)),
         'batch_size': int(dl_cfg.batch_size),
         'n_epochs': int(dl_cfg.n_epochs),
@@ -98,16 +57,39 @@ def build_train_config_from_json(params: dict, dl_cfg=None) -> TrainConfig:
         'patience': int(dl_cfg.patience),
         'loss_fn': str(dl_cfg.loss_fn),
         'optimizer': str(dl_cfg.optimizer),
-        'scheduler': dl_cfg.get('scheduler'),
+        'scheduler': _normalize_scheduler(dl_cfg.get('scheduler')),
         'weight_decay': 0.0,
         'hidden_layers': [128, 64],
         'activation': 'relu',
-        'batch_norm': True,
+        'batch_norm': False,
         'dropout': 0.0,
     }
-    merged.update(params)
-    merged['scheduler'] = _normalize_scheduler(merged.get('scheduler'))
-    return TrainConfig(**merged)
+
+
+def _to_train_config(params: dict, name: str | None = None) -> TrainConfig:
+    clean = dict(params)
+    for key in ('experiments', 'device', 'tune'):
+        clean.pop(key, None)
+    if name is not None:
+        clean['name'] = name
+    clean['scheduler'] = _normalize_scheduler(clean.get('scheduler'))
+    allowed = {f.name for f in fields(TrainConfig)}
+    return TrainConfig(**{k: v for k, v in clean.items() if k in allowed})
+
+
+def build_train_config_from_yaml(exp_cfg, dl_cfg=None) -> TrainConfig:
+    """Собирает TrainConfig из записи dl.experiments + дефолтов dl/config.yaml."""
+    base = _dl_defaults_dict(dl_cfg)
+    exp = OmegaConf.to_container(exp_cfg, resolve=True)
+    base.update(exp)
+    return _to_train_config(base)
+
+
+def build_train_config_from_json(params: dict, dl_cfg=None) -> TrainConfig:
+    """Собирает TrainConfig из outputs/dl/best_params.json (ключ dnn)."""
+    base = _dl_defaults_dict(dl_cfg)
+    base.update(params)
+    return _to_train_config(base, name='tuned')
 
 
 def train_config_to_dict(cfg_obj: TrainConfig) -> dict:
@@ -132,7 +114,7 @@ def train_config_to_dict(cfg_obj: TrainConfig) -> dict:
 
 
 def load_tuned_params() -> tuple[dict, float | None]:
-    """Читает секцию dnn из outputs/dl/best_params.json."""
+    """Возвращает (dnn_params, dnn_cv_rmsle) из outputs/dl/best_params.json."""
     if not PARAMS_PATH.exists():
         return {}, None
     try:

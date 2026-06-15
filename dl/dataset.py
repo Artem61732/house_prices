@@ -8,19 +8,21 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from torch.utils.data import DataLoader, Dataset
+
+
+def _cat_series(df: pd.DataFrame, col: str) -> pd.Series:
+    return df[col].fillna('None').astype(str)
 
 
 @dataclass
 class FeatureEncoder:
     """
-    Кодирует числовые (impute + scale) и категориальные признаки для DNN.
+    Кодирует числовые и категориальные признаки для DNN.
 
-    cat_encoding задаёт способ обработки категорий (см. TrainConfig):
-    embedding → индексы для Embedding; onehot/freq/target → признаки
-    добавляются к числовому входу.
+    Поддерживает cat_encoding: embedding, onehot, freq, target.
+    fit() вызывается только на train-фолде (или полном train для сабмита).
     """
 
     numeric_cols: list[str]
@@ -37,6 +39,7 @@ class FeatureEncoder:
     target_global_mean: float | None = None
 
     def fit(self, df: pd.DataFrame, y: np.ndarray | None = None) -> FeatureEncoder:
+        """Обучает imputer/scaler и маппинги категорий на train-выборке."""
         self.imputer = SimpleImputer(strategy='mean')
         self.scaler = StandardScaler()
         self.cat_maps = {}
@@ -49,35 +52,25 @@ class FeatureEncoder:
             num = self.imputer.fit_transform(df[self.numeric_cols].values)
             self.scaler.fit(num)
 
-        # Категориальные кодировки
         enc = self.cat_encoding.lower()
         if enc == 'embedding':
             for col in self.categorical_cols:
-                values = df[col].fillna('None').astype(str)
-                uniq = sorted(values.unique())
-                mapping = {v: i + 1 for i, v in enumerate(uniq)}  # 0 = unknown
+                values = _cat_series(df, col)
+                mapping = {v: i + 1 for i, v in enumerate(sorted(values.unique()))}
                 self.cat_maps[col] = mapping
-
-            self.cat_cardinalities = [
-                len(self.cat_maps[c]) for c in self.categorical_cols
-            ]
-        elif enc == 'onehot':
-            if self.categorical_cols:
-                self.onehot = OneHotEncoder(
-                    handle_unknown='ignore',
-                    sparse_output=False,
-                )
-                values = df[self.categorical_cols].copy()
-                for c in self.categorical_cols:
-                    values[c] = values[c].fillna('None').astype(str)
-                self.onehot.fit(values.values)
+            self.cat_cardinalities = [len(self.cat_maps[c]) for c in self.categorical_cols]
+        elif enc == 'onehot' and self.categorical_cols:
+            self.onehot = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+            values = df[self.categorical_cols].copy()
+            for col in self.categorical_cols:
+                values[col] = _cat_series(values, col)
+            self.onehot.fit(values.values)
             self.cat_cardinalities = []
         elif enc == 'freq':
             self.freq_maps = {}
             total = len(df)
             for col in self.categorical_cols:
-                values = df[col].fillna('None').astype(str)
-                counts = values.value_counts(dropna=False)
+                counts = _cat_series(df, col).value_counts(dropna=False)
                 self.freq_maps[col] = (counts / max(total, 1)).to_dict()
             self.cat_cardinalities = []
         elif enc == 'target':
@@ -87,10 +80,9 @@ class FeatureEncoder:
             self.target_global_mean = float(y_arr.mean()) if len(y_arr) else 0.0
             self.target_maps = {}
             for col in self.categorical_cols:
-                values = df[col].fillna('None').astype(str)
+                values = _cat_series(df, col)
                 temp = pd.DataFrame({'cat': values.values, 'y': y_arr})
                 stats = temp.groupby('cat')['y'].agg(['mean', 'count'])
-                # Smoothing по схеме: (mean*count + global*alpha)/(count + alpha)
                 smoothed = (
                     (stats['mean'] * stats['count'] + self.target_global_mean * self.target_smoothing)
                     / (stats['count'] + self.target_smoothing)
@@ -98,72 +90,71 @@ class FeatureEncoder:
                 self.target_maps[col] = smoothed.to_dict()
             self.cat_cardinalities = []
         else:
-            raise ValueError(f"Unknown cat_encoding='{self.cat_encoding}'. Use embedding/onehot/target/freq.")
+            raise ValueError(
+                f"Unknown cat_encoding='{self.cat_encoding}'. Use embedding/onehot/target/freq."
+            )
         return self
 
     def transform(
         self,
         df: pd.DataFrame,
         use_embeddings: bool = False,
-) -> tuple[np.ndarray, np.ndarray | None]:
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """
+        Преобразует DataFrame в (numeric, categorical) массивы.
+
+        При embedding + use_embeddings=True возвращает int-индексы для Embedding-слоёв.
+        Иначе категории конкатенируются с числовыми в один numeric-вектор.
+        """
         numeric = np.zeros((len(df), 0), dtype=np.float32)
         if self.numeric_cols:
             raw = self.imputer.transform(df[self.numeric_cols].values)
             numeric = self.scaler.transform(raw).astype(np.float32)
 
-        enc = self.cat_encoding.lower()
         if not self.categorical_cols:
             return numeric, None
 
-        # embedding: возвращаем отдельный тензор индексов
+        enc = self.cat_encoding.lower()
         if enc == 'embedding' and use_embeddings:
             cat = np.zeros((len(df), len(self.categorical_cols)), dtype=np.int64)
             for j, col in enumerate(self.categorical_cols):
-                values = df[col].fillna('None').astype(str)
-                mapping = self.cat_maps[col] if self.cat_maps is not None else {}
-                cat[:, j] = values.map(lambda v: mapping.get(v, 0)).values
+                mapping = self.cat_maps.get(col, {})
+                cat[:, j] = _cat_series(df, col).map(lambda v: mapping.get(v, 0)).values
             return numeric, cat
 
-        # остальные варианты: кодированные категории добавляем в "numeric"
         if enc == 'onehot':
-            if self.onehot is None:
-                raise RuntimeError("OneHotEncoder is not fitted")
             values = df[self.categorical_cols].copy()
-            for c in self.categorical_cols:
-                values[c] = values[c].fillna('None').astype(str)
+            for col in self.categorical_cols:
+                values[col] = _cat_series(values, col)
             cat_features = self.onehot.transform(values.values).astype(np.float32)
-            numeric = np.concatenate([numeric, cat_features], axis=1)
-            return numeric, None
+            return np.concatenate([numeric, cat_features], axis=1), None
 
         if enc == 'freq':
-            if self.freq_maps is None:
-                raise RuntimeError("freq_maps is not fitted")
-            cols_out = []
-            for col in self.categorical_cols:
-                values = df[col].fillna('None').astype(str)
-                col_freq = values.map(lambda v: self.freq_maps[col].get(v, 0.0)).values.astype(np.float32)
-                cols_out.append(col_freq.reshape(-1, 1))
-            cat_features = np.concatenate(cols_out, axis=1) if cols_out else np.zeros((len(df), 0), dtype=np.float32)
-            numeric = np.concatenate([numeric, cat_features], axis=1)
-            return numeric, None
+            cols_out = [
+                _cat_series(df, col)
+                .map(lambda v, c=col: self.freq_maps[c].get(v, 0.0))
+                .values.astype(np.float32)
+                .reshape(-1, 1)
+                for col in self.categorical_cols
+            ]
+            return np.concatenate([numeric, *cols_out], axis=1), None
 
         if enc == 'target':
-            if self.target_maps is None or self.target_global_mean is None:
-                raise RuntimeError("target_maps is not fitted")
-            cols_out = []
-            for col in self.categorical_cols:
-                values = df[col].fillna('None').astype(str)
-                mapped = values.map(lambda v: self.target_maps[col].get(v, self.target_global_mean)).values.astype(np.float32)
-                cols_out.append(mapped.reshape(-1, 1))
-            cat_features = np.concatenate(cols_out, axis=1) if cols_out else np.zeros((len(df), 0), dtype=np.float32)
-            numeric = np.concatenate([numeric, cat_features], axis=1)
-            return numeric, None
+            cols_out = [
+                _cat_series(df, col)
+                .map(lambda v, c=col: self.target_maps[c].get(v, self.target_global_mean))
+                .values.astype(np.float32)
+                .reshape(-1, 1)
+                for col in self.categorical_cols
+            ]
+            return np.concatenate([numeric, *cols_out], axis=1), None
 
-        # Для совместимости: если запросили embedding но cat_encoding не embedding — просто вернём numeric
         return numeric, None
 
 
 class HousePriceDataset(Dataset):
+    """PyTorch Dataset: (numeric[, categorical][, target]) тензоры."""
+
     def __init__(
         self,
         numeric: np.ndarray,
@@ -183,13 +174,12 @@ class HousePriceDataset(Dataset):
         return len(self.numeric)
 
     def __getitem__(self, idx: int):
-        if self.targets is None:
-            if self.categorical is None:
-                return self.numeric[idx]
-            return self.numeric[idx], self.categorical[idx]
-        if self.categorical is None:
-            return self.numeric[idx], self.targets[idx]
-        return self.numeric[idx], self.categorical[idx], self.targets[idx]
+        items = [self.numeric[idx]]
+        if self.categorical is not None:
+            items.append(self.categorical[idx])
+        if self.targets is not None:
+            items.append(self.targets[idx])
+        return tuple(items)
 
 
 def make_dataloader(
@@ -199,5 +189,9 @@ def make_dataloader(
     batch_size: int,
     shuffle: bool,
 ) -> DataLoader:
-    ds = HousePriceDataset(numeric, categorical, targets)
-    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle)
+    """DataLoader поверх HousePriceDataset с заданным batch_size и shuffle."""
+    return DataLoader(
+        HousePriceDataset(numeric, categorical, targets),
+        batch_size=batch_size,
+        shuffle=shuffle,
+    )

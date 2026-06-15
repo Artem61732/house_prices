@@ -7,10 +7,8 @@
 
 from __future__ import annotations
 
-# --- кодирование категориальных признаков для DNN ---
 CAT_ENCODINGS = ('embedding', 'onehot', 'freq', 'target')
 
-# --- общие списки гиперпараметров ---
 OPTIMIZERS = ('adam', 'adamw', 'sgd', 'rmsprop')
 SCHEDULERS = ('cosine', 'step', 'plateau', 'none')
 LOSS_FNS = ('mse', 'mae', 'huber')
@@ -18,7 +16,7 @@ ACTIVATIONS = ('relu', 'elu', 'gelu', 'leaky_relu')
 BATCH_SIZES = (32, 64, 128)
 HIDDEN_WIDTHS = (64, 128, 256, 512)
 
-# --- refined search space (после первого раунда тюнинга) ---
+# refined search space
 REFINED_CAT_ENCODINGS = ('onehot', 'target')
 REFINED_OPTIMIZERS = ('adam',)
 REFINED_SCHEDULERS = ('cosine', 'none')
@@ -36,7 +34,7 @@ REFINED_ARCHITECTURES: dict[str, list[int]] = {
     '512_512_512': [512, 512, 512],
 }
 
-# --- wide search space (exploratory) ---
+# wide search space
 WIDE_CAT_ENCODINGS = CAT_ENCODINGS
 WIDE_OPTIMIZERS = OPTIMIZERS
 WIDE_SCHEDULERS = SCHEDULERS

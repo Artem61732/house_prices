@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import numpy as np
+import pandas as pd
 from catboost import CatBoostRegressor
 from lightgbm import LGBMRegressor
 from sklearn.compose import ColumnTransformer
@@ -13,6 +15,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from xgboost import XGBRegressor
 
 from config import cfg
+from features import prepare_for_catboost, prepare_for_lightgbm
 
 RANDOM_STATE = int(cfg.random_state)
 
@@ -52,5 +55,55 @@ def get_catboost_model(cat_features, params: dict | None = None):
 
 def get_lightgbm_model(params: dict | None = None):
     """LightGBM в нативном режиме (pandas category колонки auto-detect)."""
-    kwargs = {'random_state': RANDOM_STATE, 'verbose': -1, **(params or {})}
+    kwargs = {'random_state': RANDOM_STATE, 'verbose': -1, 'n_jobs': -1, **(params or {})}
     return LGBMRegressor(**kwargs)
+
+
+def _feature_columns(X: pd.DataFrame) -> tuple[pd.Index, pd.Index]:
+    numeric = X.select_dtypes(include=['int64', 'float64']).columns
+    categorical = X.select_dtypes(include='object').columns
+    return numeric, categorical
+
+
+def train_catboost_predict(
+    X_train: pd.DataFrame,
+    y_log,
+    X_test: pd.DataFrame,
+    params: dict | None = None,
+) -> np.ndarray:
+    """Обучает CatBoost на train и предсказывает log-таргет на test."""
+    X_tr, cat_features = prepare_for_catboost(X_train)
+    X_te, _ = prepare_for_catboost(X_test)
+    model = get_catboost_model(cat_features, params)
+    model.fit(X_tr, y_log)
+    return model.predict(X_te)
+
+
+def train_ridge_predict(
+    X_train: pd.DataFrame,
+    y_log,
+    X_test: pd.DataFrame,
+    params: dict | None = None,
+) -> np.ndarray:
+    """Обучает Ridge (с препроцессором) на train и предсказывает log-таргет на test."""
+    numeric, categorical = _feature_columns(X_train)
+    pipe = Pipeline([
+        ('preprocessor', get_preprocessor(numeric, categorical)),
+        ('model', Ridge(random_state=RANDOM_STATE, **(params or {}))),
+    ])
+    pipe.fit(X_train, y_log)
+    return pipe.predict(X_test)
+
+
+def train_lightgbm_predict(
+    X_train: pd.DataFrame,
+    y_log,
+    X_test: pd.DataFrame,
+    params: dict | None = None,
+) -> np.ndarray:
+    """Обучает LightGBM на train и предсказывает log-таргет на test."""
+    X_tr, _ = prepare_for_lightgbm(X_train)
+    X_te, _ = prepare_for_lightgbm(X_test)
+    model = get_lightgbm_model(params)
+    model.fit(X_tr, y_log)
+    return model.predict(X_te)

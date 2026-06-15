@@ -14,14 +14,7 @@ CONFIG_PATHS = {
 
 
 def load_config():
-    """
-    Собирает единый cfg из трёх файлов (порядок: root → ml → dl).
-
-    Источники правды:
-      - config.yaml      — paths, random_state, cv, preprocess
-      - ml/config.yaml   — blend.weights (ручные), tune (Optuna ML)
-      - dl/config.yaml   — dl.* (DNN, experiments, Optuna DL)
-    """
+    """Собирает cfg из config.yaml, ml/config.yaml, dl/config.yaml (в этом порядке)."""
     cfg = OmegaConf.create({})
     for path in CONFIG_PATHS.values():
         cfg = OmegaConf.merge(cfg, OmegaConf.load(path))

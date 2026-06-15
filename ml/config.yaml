@@ -1,13 +1,5 @@
-# =============================================================================
-# ML-КОНФИГ
-# =============================================================================
-# blend.weights — РУЧНЫЕ веса для финального сабмита (ml/create_submission.py).
-#   Не подбираются Optuna и не читаются из ml/best_params.json.
-#   Подбор весов на OOF — только в ml/main.py (find_blend_weights), для анализа.
-#
-# tune — дефолты Optuna-тюнинга ML-моделей (ml/tune.py).
-#   Лучшие параметры моделей сохраняются в ml/best_params.json.
-# =============================================================================
+# Веса blend — ручные, не из Optuna (см. ml/create_submission.py).
+# Гиперпараметры моделей — outputs/ml/best_params.json (ml/tune.py).
 
 blend:
   weights:
@@ -16,4 +8,4 @@ blend:
     lightgbm: 0.25
 
 tune:
-  n_trials: 30  # число trials Optuna по умолчанию для CatBoost/Ridge/LightGBM
+  n_trials: 30

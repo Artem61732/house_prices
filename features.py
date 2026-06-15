@@ -114,32 +114,25 @@ def log_skewed_features(df: pd.DataFrame, skewed_cols: list[str]) -> pd.DataFram
     return df
 
 
-def prepare_for_catboost(X: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
-    """
-    Готовит данные для нативного режима CatBoost:
-    - категориальные колонки -> str + 'None' для NaN
-    - числовые NaN не трогаем, CatBoost сам их обработает.
-    Возвращает (X_clean, cat_features).
-    """
+def _prepare_categorical(
+    X: pd.DataFrame,
+    dtype: type | str,
+) -> tuple[pd.DataFrame, list[str]]:
     X = X.copy()
     cat_features = X.select_dtypes(include=['object']).columns.tolist()
-    for c in cat_features:
-        X[c] = X[c].fillna('None').astype(str)
+    for col in cat_features:
+        X[col] = X[col].fillna('None').astype(dtype)
     return X, cat_features
+
+
+def prepare_for_catboost(X: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """CatBoost: категории как str, числовые NaN не трогаем."""
+    return _prepare_categorical(X, str)
 
 
 def prepare_for_lightgbm(X: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
-    """
-    Готовит данные для нативного режима LightGBM:
-    - категориальные колонки -> pandas Categorical (LightGBM их auto-detect),
-    - числовые NaN не трогаем, LightGBM сам их обработает.
-    Возвращает (X_clean, cat_features).
-    """
-    X = X.copy()
-    cat_features = X.select_dtypes(include=['object']).columns.tolist()
-    for c in cat_features:
-        X[c] = X[c].fillna('None').astype('category')
-    return X, cat_features
+    """LightGBM: категории как pandas category."""
+    return _prepare_categorical(X, 'category')
 
 
 def prepare_for_dl(X: pd.DataFrame) -> tuple[list[str], list[str]]:

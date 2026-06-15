@@ -1,28 +1,16 @@
-# =============================================================================
-# ОБЩИЙ КОНФИГ (источник правды для ML и DL)
-# =============================================================================
-# Менять здесь:
-#   - paths          пути к данным и сабмитам
-#   - random_state   воспроизводимость (CV, модели, Optuna)
-#   - cv.n_splits    число фолдов для всех пайплайнов
-#   - preprocess     общий feature engineering
-#
-# НЕ менять здесь (см. ml/config.yaml и dl/config.yaml):
-#   - blend.weights  веса ML-бленда (ручные, не из тюнинга)
-#   - tune           Optuna для ML
-#   - dl.*           всё, что касается DNN
-# =============================================================================
+# Общий конфиг: paths, random_state, cv, preprocess.
+# ML-специфичное — ml/config.yaml, DL — dl/config.yaml.
 
 paths:
-  train: "data/train.csv"       # обучающая выборка Kaggle
-  test: "data/test.csv"         # тест для инференса
-  submission: "submission.csv"      # сабмит ML-пайплайна
-  dl_submission: "submission_dl.csv"  # сабмит DL-пайплайна
+  train: "data/train.csv"
+  test: "data/test.csv"
+  submission: "submission.csv"
+  dl_submission: "submission_dl.csv"
 
-random_state: 42  # сид для KFold, моделей, Optuna
+random_state: 42
 
 cv:
-  n_splits: 5  # KFold / StratifiedKFold — общий для ML и DL
+  n_splits: 5
 
 preprocess:
-  skew_threshold: 0.75  # порог |skew| для log1p (считается на train)
+  skew_threshold: 0.75  # |skew| > threshold → log1p (считается на train)

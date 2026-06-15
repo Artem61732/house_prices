@@ -23,6 +23,7 @@ from dl.train import fit_full_model, predict
 
 
 def resolve_train_config(use_tuned: bool, experiment_name: str | None):
+    """Выбирает TrainConfig из best_params.json или эксперимента dl/config.yaml."""
     dl_cfg = cfg.dl
 
     if use_tuned:
@@ -46,6 +47,7 @@ def resolve_train_config(use_tuned: bool, experiment_name: str | None):
 
 
 def create_submission(use_tuned: bool = True, experiment_name: str | None = None):
+    """Обучает DNN на полном train и сохраняет submission_dl.csv."""
     dl_cfg = cfg.dl
     device_cfg = str(dl_cfg.get('device', 'auto'))
     random_state = int(cfg.random_state)
@@ -74,11 +76,10 @@ def create_submission(use_tuned: bool = True, experiment_name: str | None = None
     pred_log = predict(model, encoder, X_test, train_cfg, device_cfg)
     y_pred = np.expm1(pred_log)
 
-    submission_path = getattr(cfg.paths, 'dl_submission', 'submission_dl.csv')
     submission = pd.DataFrame({'Id': test_ids, 'SalePrice': y_pred})
-    submission.to_csv(submission_path, index=False)
+    submission.to_csv(cfg.paths.dl_submission, index=False)
 
-    print(f"\nГотово! Файл '{submission_path}' сохранён ({len(submission)} строк).")
+    print(f"\nГотово! Файл '{cfg.paths.dl_submission}' сохранён ({len(submission)} строк).")
     print(
         f"Sale price: min={y_pred.min():.0f}, "
         f"median={np.median(y_pred):.0f}, max={y_pred.max():.0f}"

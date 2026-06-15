@@ -12,6 +12,7 @@ from sklearn.model_selection import cross_val_predict, cross_val_score
 
 
 def summarize_cv(rmsle_folds, y_true_log, y_pred_log):
+    """Агрегирует fold-метрики CV в словарь (RMSLE, MAE, R2, OOF-предсказания)."""
     rmsle_folds = np.asarray(rmsle_folds)
     y_pred_dollars = np.expm1(y_pred_log)
     y_true_dollars = np.expm1(y_true_log)
@@ -56,6 +57,7 @@ def cv_evaluate_manual(make_model, X, y, kf):
 
 
 def print_metrics(name, metrics):
+    """Печатает RMSLE, MAE и R2 для одной модели."""
     print(f"--- {name} ---")
     print(f"RMSLE (CV):  {metrics['rmsle_mean']:.4f} ± {metrics['rmsle_std']:.4f}")
     print(f"  per-fold:  {np.array2string(metrics['rmsle_folds'], precision=4)}")

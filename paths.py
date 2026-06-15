@@ -13,5 +13,6 @@ DL_BACKUPS_DIR = DL_OUTPUTS_DIR / 'backups'
 
 
 def ensure_output_dirs() -> None:
+    """Создаёт outputs/ml/ и outputs/dl/ с подпапками backups/."""
     for d in (ML_OUTPUTS_DIR, DL_OUTPUTS_DIR, ML_BACKUPS_DIR, DL_BACKUPS_DIR):
         d.mkdir(parents=True, exist_ok=True)

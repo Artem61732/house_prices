@@ -36,9 +36,10 @@ PARAMS_PATH = ML_BEST_PARAMS_PATH
 BACKUP_PATH = ML_BACKUPS_DIR / 'best_params.backup.json'
 
 
-# ============================ CatBoost ============================
+# CatBoost
 
 def make_objective_catboost(X, y, cat_features, kf):
+    """Фабрика Optuna-objective для CatBoost с KFold CV."""
     def objective(trial: optuna.Trial) -> float:
         params = dict(
             learning_rate=trial.suggest_float('learning_rate', 0.03, 0.1, log=True),
@@ -77,6 +78,7 @@ def make_objective_catboost(X, y, cat_features, kf):
 
 
 def tune_catboost(n_trials: int, n_splits: int, random_state: int):
+    """Optuna-тюнинг CatBoost; возвращает (best_params, best_cv_rmsle)."""
     X, y = load_preprocessed_train_target()
     X_cat, cat_features = prepare_for_catboost(X)
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
@@ -119,9 +121,10 @@ def tune_catboost(n_trials: int, n_splits: int, random_state: int):
     return study.best_params, study.best_value
 
 
-# ============================ Ridge ============================
+# Ridge
 
 def tune_ridge(n_trials: int, n_splits: int, random_state: int):
+    """Optuna-тюнинг Ridge (alpha); возвращает (best_params, best_cv_rmsle)."""
     X, y = load_preprocessed_train_target()
     numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
     categorical_features = X.select_dtypes(include=['object']).columns
@@ -152,9 +155,10 @@ def tune_ridge(n_trials: int, n_splits: int, random_state: int):
     return study.best_params, study.best_value
 
 
-# ============================ LightGBM ============================
+# LightGBM
 
 def make_objective_lightgbm(X, y, kf):
+    """Фабрика Optuna-objective для LightGBM с KFold CV."""
     def objective(trial: optuna.Trial) -> float:
         params = dict(
             learning_rate=trial.suggest_float('learning_rate', 0.01, 0.1, log=True),
@@ -197,6 +201,7 @@ def make_objective_lightgbm(X, y, kf):
 
 
 def tune_lightgbm(n_trials: int, n_splits: int, random_state: int):
+    """Optuna-тюнинг LightGBM; возвращает (best_params, best_cv_rmsle)."""
     X, y = load_preprocessed_train_target()
     X_lgb, _ = prepare_for_lightgbm(X)
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
@@ -235,7 +240,7 @@ def tune_lightgbm(n_trials: int, n_splits: int, random_state: int):
     return study.best_params, study.best_value
 
 
-# ============================ Сохранение ============================
+# Сохранение best_params.json
 
 def _backup_params():
     """Перед перезаписью копирует текущий best_params.json в .backup.json."""
@@ -253,6 +258,7 @@ def save_best_params(
     ridge_params=None, ridge_score=None,
     lightgbm_params=None, lightgbm_score=None,
 ):
+    """Сохраняет тюненные параметры ML-моделей в outputs/ml/best_params.json."""
     _backup_params()
 
     payload = {}

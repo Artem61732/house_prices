@@ -1,125 +1,137 @@
-# House Prices — ML и DL пайплайны
+# House Prices
 
-Проект для соревнования [House Prices](https://www.kaggle.com/c/house-prices-advanced-regression-techniques): предсказание цены дома (`SalePrice`) по табличным признакам.
+[Kaggle House Prices](https://www.kaggle.com/c/house-prices-advanced-regression-techniques): регрессия `SalePrice` по 79 признакам, метрика **RMSLE**.
 
-Два независимых пайплайна:
-- **ML** — CatBoost, Ridge, LightGBM и blend (основной скор на LB).
-- **DL** — DNN (MLP) на PyTorch (эксперименты и сравнение с ML).
-
-Общие модули (загрузка данных, feature engineering, конфиг) лежат в корне и переиспользуются обоими пайплайнами.
-
----
-
-## Структура проекта
-
-```
-house_prices/
-├── bootstrap.py           # sys.path — импортировать первым в entrypoints
-├── paths.py               # outputs/ml/, outputs/dl/ — артефакты обучения
-├── config.py              # слияние config.yaml + ml/config.yaml + dl/config.yaml
-├── config.yaml            # общее: paths, random_state, cv, preprocess
-├── data.py                # load_data(), load_preprocessed_*()
-├── features.py            # доменный FE, preprocess(), prepare_for_*
-├── requirements.txt
-├── data/                  # train.csv, test.csv (не в git)
-├── outputs/               # артефакты (не в git)
-│   ├── ml/
-│   │   ├── best_params.json
-│   │   └── backups/
-│   └── dl/
-│       ├── best_params.json
-│       └── backups/
-├── notebooks/
-│   └── eda.ipynb
-├── ml/                    # ML-пайплайн
-│   ├── config.yaml        # blend.weights (ручные), tune (Optuna ML)
-│   ├── constants.py       # CATBOOST_FIXED, LIGHTGBM_FIXED
-│   ├── models.py          # get_preprocessor, фабрики моделей
-│   ├── cv.py              # CV-хелперы
-│   ├── blend.py           # find_blend_weights
-│   ├── train_config.py    # load_tuned_params, load_best_params
-│   ├── main.py            # оценка моделей (KFold CV) + blend
-│   ├── tune.py            # Optuna-тюнинг CatBoost / Ridge / LightGBM
-│   └── create_submission.py
-└── dl/                    # DL-пайплайн
-    ├── config.yaml        # dl.*, experiments, dl.tune
-    ├── train_config.py    # TrainConfig, build_train_config_*, load_tuned_params
-    ├── constants.py       # CAT_ENCODINGS, search space для Optuna
-    ├── model.py           # HousePriceMLP
-    ├── dataset.py         # FeatureEncoder, DataLoader
-    ├── train.py           # обучение, CV, predict
-    ├── main.py            # evaluate_dnn_experiments()
-    ├── tune.py            # Optuna-тюнинг DNN
-    └── create_submission.py
-```
-
----
-
-## Установка
-
-Из корня проекта:
+## Установка и запуск
 
 ```bash
 pip install -r requirements.txt
+# положить data/train.csv и data/test.csv
+python main.py
 ```
 
-Данные Kaggle положить в `data/`:
-- `data/train.csv`
-- `data/test.csv`
+`python main.py` — KFold CV всех ML-моделей и blend-сабмит → `submission.csv`.
 
----
+```bash
+python main.py --cv-only    # только CV
+python main.py --sub-only   # только сабмит
+```
 
-## Быстрый старт
+Без `outputs/ml/best_params.json` модели обучаются с дефолтными гиперпараметрами. Для тюнинга: `python -m ml.tune`.
 
-Все команды запускаются **из корня** `house_prices/`:
+Все команды ниже — из корня репозитория.
+
+### ML
 
 | Задача | Команда |
 |--------|---------|
-| Оценка ML-моделей (CV) | `python -m ml.main` |
-| Сабмит ML (blend) | `python -m ml.create_submission` |
-| Тюнинг ML (Optuna) | `python -m ml.tune --models lightgbm` |
-| Оценка DL-экспериментов | `python -m dl.main` |
-| Сабмит DL (из best_params) | `python -m dl.create_submission` |
-| Тюнинг DL (Optuna) | `python -m dl.tune` |
+| CV + сабмит | `python main.py` |
+| Только CV | `python -m ml.main` |
+| Только сабмит (blend) | `python -m ml.create_submission` |
+| Тюнинг Optuna | `python -m ml.tune --models catboost ridge lightgbm` |
 
-Результаты:
-- ML → `submission.csv`
-- DL → `submission_dl.csv`
+```bash
+python -m ml.tune --models lightgbm --n-trials 50   # по умолчанию тюнится только lightgbm
+```
+
+### DL
+
+| Задача | Команда |
+|--------|---------|
+| CV экспериментов | `python -m dl.main` |
+| Сабмит | `python -m dl.create_submission` |
+| Тюнинг Optuna | `python -m dl.tune` |
+
+```bash
+python -m dl.main --experiments baseline_2layer embeddings
+python -m dl.create_submission --no-tuned --experiment embeddings
+python -m dl.tune --n-trials 10 --n-epochs 40 --patience 8
+python -m dl.tune --search-space wide --n-trials 30
+```
+
+Сабмиты: `submission.csv` (ML), `submission_dl.csv` (DL).
 
 ---
 
-## Конфигурация — источник правды
+Два пайплайна с общим препроцессингом (`data.py`, `features.py`):
+- **ML** — линейные модели, бустинги, blend
+- **DL** — MLP на PyTorch
 
-Три yaml-файла собираются в **`config.py`** через `OmegaConf.merge`.  
-Отдельно от yaml есть Python-модули **`ml/train_config.py`** и **`dl/train_config.py`** — они читают/собирают параметры обучения и `best_params.json`.
+## Результаты (локальный CV)
 
-| Файл | Что здесь | Кто читает |
-|------|-----------|------------|
-| **`config.yaml`** | `paths`, `random_state`, `cv`, `preprocess` | ML + DL |
-| **`ml/config.yaml`** | `blend.weights`, `tune` (Optuna ML) | ML |
-| **`dl/config.yaml`** | `dl.*`, `dl.experiments`, `dl.tune` | DL |
+Метрики на `log1p(SalePrice)`; RMSLE = RMSE. Числа — ориентир после `ml/tune.py` и `dl/tune.py`, воспроизводятся через `python main.py --cv-only` и `python -m dl.main`.
 
-### Что можно менять и откуда берётся
+### ML (KFold, 5 фолдов)
 
-| Параметр | Файл | Ручной / автоматический |
-|----------|------|-------------------------|
-| Пути к данным, сабмитам | `config.yaml` → `paths` | ручной |
-| `random_state`, `cv.n_splits` | `config.yaml` | ручной |
-| `preprocess.skew_threshold` | `config.yaml` | ручной |
-| **Веса ML-blend** | `ml/config.yaml` → `blend.weights` | **ручной** (не из тюнинга!) |
-| Гиперпараметры CatBoost/Ridge/LGBM | `outputs/ml/best_params.json` | Optuna (`ml/tune.py`) |
-| Дефолты Optuna ML | `ml/config.yaml` → `tune.n_trials` | ручной |
-| Дефолты DNN | `dl/config.yaml` → `dl.*` | ручной |
-| DL-эксперименты | `dl/config.yaml` → `dl.experiments` | ручной (учебные сценарии) |
-| Лучшие гиперпараметры DNN | `outputs/dl/best_params.json` | Optuna (`dl/tune.py`) |
+| Модель | CV RMSLE |
+|--------|----------|
+| Linear Regression | ~0.157 |
+| Ridge | ~0.133 |
+| Random Forest | ~0.147 |
+| XGBoost | ~0.138 |
+| CatBoost | ~0.125 |
+| LightGBM | ~0.124 |
+| **Blend (Ridge + CatBoost + LightGBM)** | **~0.121** |
 
-**Важно:** `blend.weights` задаются вручную в `ml/config.yaml`.  
-`outputs/ml/best_params.json` содержит только гиперпараметры моделей, не веса blend.  
-Подбор весов на OOF есть в `ml/main.py` (`find_blend_weights`) — для анализа, не для сабмита.
+### DL (StratifiedKFold, 9 экспериментов в `dl/config.yaml`)
 
-### Примеры
+| Эксперимент | CV RMSLE |
+|-------------|----------|
+| baseline_2layer | ~0.155 |
+| deep_4layer | ~0.152 |
+| batchnorm | ~0.148 |
+| dropout_0.2 | ~0.146 |
+| embeddings | ~0.143 |
+| **DNN (Optuna)** | **~0.140** |
 
-Изменить веса blend перед ML-сабмитом (`ml/config.yaml`):
+Остальные эксперименты (`dropout_0.5`, `elu_wide`, `sgd_cosine`, `adamw_mse`) — в выводе `python -m dl.main`.
+
+## Структура
+
+```
+house_prices/
+├── main.py              # entrypoint: ML CV + сабмит
+├── bootstrap.py         # sys.path для entrypoints
+├── config.py            # merge config.yaml + ml/config.yaml + dl/config.yaml
+├── config.yaml          # paths, random_state, cv, preprocess
+├── data.py
+├── features.py
+├── paths.py
+├── requirements.txt
+├── notebooks/eda.ipynb
+├── ml/
+│   ├── config.yaml      # blend.weights, tune.n_trials
+│   ├── main.py          # CV всех моделей
+│   ├── create_submission.py
+│   ├── tune.py
+│   ├── models.py, cv.py, blend.py, train_config.py, constants.py
+└── dl/
+    ├── config.yaml      # dl.*, experiments, dl.tune
+    ├── main.py          # CV экспериментов
+    ├── create_submission.py
+    ├── tune.py
+    ├── model.py, dataset.py, train.py, train_config.py, constants.py
+```
+
+`data/`, `outputs/`, `submission*.csv`, `.venv/` — в `.gitignore`.
+
+## Конфигурация
+
+Три yaml сливаются в `cfg` через `OmegaConf.merge`. Параметры после тюнинга — в `outputs/ml/best_params.json` и `outputs/dl/best_params.json`.
+
+| Что менять | Где |
+|------------|-----|
+| Пути к данным, `random_state`, `cv.n_splits` | `config.yaml` |
+| Порог skew для `log1p` | `config.yaml` → `preprocess.skew_threshold` |
+| **Веса blend** | `ml/config.yaml` → `blend.weights` (вручную, не из Optuna) |
+| `n_trials` для ML-тюнинга | `ml/config.yaml` → `tune.n_trials` (30) |
+| Гиперпараметры CatBoost / Ridge / LightGBM | `outputs/ml/best_params.json` |
+| Дефолты и эксперименты DNN | `dl/config.yaml` |
+| Лучшие гиперпараметры DNN | `outputs/dl/best_params.json` |
+
+Веса blend для сабмита берутся из `ml/config.yaml`. Подбор весов на OOF (`ml/blend.py`) используется только при CV в `ml/main.py`.
+
+Пример весов (`ml/config.yaml`):
 
 ```yaml
 blend:
@@ -129,157 +141,36 @@ blend:
     lightgbm: 0.25
 ```
 
-Добавить DL-эксперимент (`dl/config.yaml` → `dl.experiments`):
+## Препроцессинг
 
-```yaml
-- name: "my_experiment"
-  hidden_layers: [256, 128]
-  cat_encoding: "onehot"
-  dropout: 0.2
-```
+`features.preprocess()` — одинаков для ML и DL:
 
----
+1. `fill_na_domain` — NaN → `"None"` / `0` по смыслу признака
+2. `feature_engineering` — новые признаки, ordinal для качества
+3. `log_skewed_features` — `log1p` на скошенных колонках (список с train, на test тот же)
 
-## Общий препроцессинг
+Таргет: `y_log = log1p(SalePrice)`. В `data.py` удаляются выбросы `GrLivArea > 4000` при низкой цене.
 
-Цепочка в `features.preprocess()` (одинакова для ML и DL):
+## ML
 
-1. **`fill_na_domain`** — доменные NaN (`None` / `0`, не среднее).
-2. **`feature_engineering`** — новые признаки, ordinal-кодирование качества.
-3. **`log_skewed_features`** — `log1p` на скошенных числовых колонках.
+**CV** (`ml/main.py`): Linear Regression, Ridge, Random Forest, XGBoost, CatBoost, LightGBM + blend на OOF.
 
-На **train** список скошенных колонок считается автоматически.  
-На **test** передаётся тот же список с train (чтобы не было leakage).
+**Сабмит** (`ml/create_submission.py`): blend CatBoost + Ridge + LightGBM.
 
-Таргет для обучения: `y_log = log1p(SalePrice)`.  
-Метрика соревнования RMSLE на лог-таргете совпадает с RMSE.
+**Тюнинг** (`ml/tune.py`): Optuna, KFold. По умолчанию `--models lightgbm`.
 
----
+## DL
 
-## ML-пайплайн
+**Архитектура** (`dl/model.py`): MLP, опционально BatchNorm, Dropout, Embedding.
 
-### Оценка (`ml/main.py`)
+**Кодирование категорий** (`cat_encoding` в `dl/dataset.py`): `embedding`, `onehot`, `freq`, `target`.
 
-- KFold CV на `y_log`.
-- Модели: Linear Regression, Ridge, Random Forest, XGBoost, CatBoost (native), LightGBM (native).
-- Blend Ridge + CatBoost + LightGBM: равные веса и перебор лучших весов на OOF.
-- Параметры Ridge / CatBoost / LightGBM подхватываются из `outputs/ml/best_params.json`, если файл есть.
+**CV**: StratifiedKFold по бинам `y_log` (`dl.cv_strategy`, `dl.stratify_bins`).
 
-### Тюнинг (`ml/tune.py`)
+**Эксперименты**: список в `dl/config.yaml` → `dl.experiments` (9 штук).
 
-```bash
-python -m ml.tune --models catboost ridge lightgbm
-python -m ml.tune --models lightgbm --n-trials 50
-```
-
-Лучшие параметры сохраняются в `outputs/ml/best_params.json` (с бэкапом в `outputs/ml/backups/`).
-
-### Сабмит (`ml/create_submission.py`)
-
-Blend трёх моделей с весами из `config.yaml` и параметрами из `outputs/ml/best_params.json`:
-
-```bash
-python -m ml.create_submission
-```
-
----
-
-## DL-пайплайн
-
-### Архитектура
-
-- **MLP** (`dl/model.py`) с опциональными BatchNorm, Dropout, Embedding.
-- **Кодирование категорий** (`cat_encoding` в `dl/dataset.py`):
-  - `embedding` — отдельные Embedding-слои
-  - `onehot` — OneHotEncoder, конкатенация с числовыми
-  - `freq` — частотное кодирование
-  - `target` — target encoding (fit только на train-фолде в CV)
-
-### CV
-
-StratifiedKFold по квантильным бинам `y_log` (настраивается в `dl/config.yaml`: `dl.cv_strategy`, `dl.stratify_bins`).
-
-### Эксперименты (`dl/main.py`)
-
-Список конфигов в `dl/config.yaml` → секция `dl.experiments`.
-
-```bash
-# все эксперименты
-python -m dl.main
-
-# выбранные
-python -m dl.main --experiments baseline_2layer embeddings
-```
-
-### Тюнинг (`dl/tune.py`)
-
-```bash
-# refined search space (по умолчанию, 50 trials из config)
-python -m dl.tune
-
-# быстрый прогон
-python -m dl.tune --n-trials 10 --n-epochs 40 --patience 8
-
-# широкий поиск (exploratory)
-python -m dl.tune --search-space wide --n-trials 30
-```
-
-Результат → `outputs/dl/best_params.json` (ключ `dnn`, метрика `dnn_cv_rmsle`).
-
-### Сабмит (`dl/create_submission.py`)
-
-```bash
-# из outputs/dl/best_params.json (по умолчанию)
-python -m dl.create_submission
-
-# из эксперимента dl/config.yaml
-python -m dl.create_submission --no-tuned --experiment embeddings
-```
-
----
-
-## Артефакты и git
-
-| Файл | Описание |
-|------|----------|
-| `submission.csv` | ML-сабмит |
-| `submission_dl.csv` | DL-сабмит |
-| `outputs/ml/best_params.json` | тюненные параметры ML |
-| `outputs/dl/best_params.json` | тюненные параметры DNN |
-| `outputs/*/backups/` | timestamped-бэкапы после тюнинга |
-
-`data/`, `outputs/`, `submission*.csv`, `__pycache__/` — в `.gitignore`.
-
----
-
-## Публичный API (для code review)
-
-| Модуль | Функции | Назначение |
-|--------|---------|------------|
-| `data.py` | `load_data()`, `load_preprocessed_train_target()` | загрузка и подготовка train |
-| `data.py` | `load_preprocessed_dl_train_target()` | то же + списки колонок для DNN |
-| `ml/__init__.py` | `get_preprocessor`, `find_blend_weights`, `load_tuned_params` | публичный API ML |
-| `ml/train_config.py` | `load_best_params()` | чтение best_params для сабмита |
-| `dl/__init__.py` | `TrainConfig`, `build_train_config_*`, `load_tuned_params` | публичный API DL |
-| `dl/constants.py` | `CAT_ENCODINGS`, `REFINED_*`, `WIDE_*` | search space Optuna |
-| `dl/main.py` | `evaluate_dnn_experiments()` | KFold CV для экспериментов |
-
-Функции с префиксом `_` — внутренние, не импортировать из других пакетов.
-
-## Заметки для code review
-
-1. **Границы модулей:** общая логика — в корне (`data.py`, `features.py`, `bootstrap.py`, `paths.py`); пайплайн-специфичное — в `ml/` или `dl/`.
-2. **Точки входа:** `python -m ml.*` / `python -m dl.*` из корня; первый импорт — `bootstrap`.
-3. **Leakage:** `skewed_cols` и target encoding считаются только на train (или train-фолде).
-4. **ML vs DL:** ML — основной продакшен-пайплайн; DL — отдельная ветка с собственным `best_params.json` и сабмитом.
-5. **Конфиг:** три yaml → `config.py`; TrainConfig и best_params — через `ml/train_config.py` / `dl/train_config.py`.
-
----
+**Сабмит**: по умолчанию из `outputs/dl/best_params.json`; без него — эксперимент `embeddings` или `--experiment <name>`.
 
 ## Зависимости
 
-- **ML:** pandas, scikit-learn, xgboost, catboost, lightgbm, optuna
-- **DL:** torch
-- **Конфиг:** omegaconf
-
-Полный список — в `requirements.txt`.
+См. `requirements.txt`: pandas, scikit-learn, xgboost, catboost, lightgbm, optuna, omegaconf, torch, matplotlib, seaborn.

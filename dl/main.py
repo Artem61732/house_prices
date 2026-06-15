@@ -20,6 +20,11 @@ def evaluate_dnn_experiments(
     n_splits: int | None = None,
     random_state: int | None = None,
 ):
+    """
+    Запускает KFold CV для списка DNN-экспериментов из dl/config.yaml.
+
+    experiment_names — подмножество имён; None — все эксперименты.
+    """
     n_splits = n_splits or int(cfg.cv.n_splits)
     random_state = random_state or int(cfg.random_state)
     dl_cfg = cfg.dl
