@@ -75,11 +75,20 @@ python -m dl.tune --n-trials 10 --n-epochs 40 --patience 8
 - **ML** — линейные модели, бустинги, blend
 - **DL** — MLP на PyTorch
 
-## Результаты (локальный CV)
+---
 
-Метрики на `log1p(SalePrice)`; RMSLE = RMSE. Числа — ориентир после `ml/tune.py` и `dl/tune.py`, воспроизводятся через `python main.py --cv-only` и `python -m dl.main`.
+## Результаты
 
-### ML (KFold, 5 фолдов)
+### Kaggle Leaderboard (public LB, RMSLE)
+
+| Пайплайн | Сабмит | Public LB |
+|----------|--------|-----------|
+| **ML** (blend: CatBoost + Ridge + LightGBM) | `submission.csv` | **0.11881** |
+| **DL** (DNN, tuned) | `submission_dl.csv` | **0.13057** |
+
+
+### Локальная кросс-валидация
+#### ML (KFold, 5 фолдов)
 
 | Модель | CV RMSLE |
 |--------|----------|
@@ -91,7 +100,7 @@ python -m dl.tune --n-trials 10 --n-epochs 40 --patience 8
 | LightGBM | ~0.124 |
 | **Blend (Ridge + CatBoost + LightGBM)** | **~0.121** |
 
-### DL (StratifiedKFold, 9 экспериментов в `dl/config.yaml`)
+#### DL (StratifiedKFold, эксперименты из `dl/config.yaml`)
 
 | Эксперимент | CV RMSLE |
 |-------------|----------|
@@ -102,8 +111,16 @@ python -m dl.tune --n-trials 10 --n-epochs 40 --patience 8
 | embeddings | ~0.143 |
 | **DNN (Optuna)** | **~0.140** |
 
-Остальные эксперименты (`dropout_0.5`, `elu_wide`, `sgd_cosine`, `adamw_mse`) — в выводе `python -m dl.main`.
+#### CV vs Leaderboard
 
+| | ML | DL |
+|---|-----|-----|
+| CV (blend / tuned) | ~0.121 | ~0.140 |
+| **Public LB** | **0.11881** | **0.13057** |
+
+LB ML чуть лучше CV blend — нормально: сабмит обучается на всём train, веса blend подобраны вручную. LB DL лучше CV tuned (~0.140) — full-train + другой split Kaggle.
+
+---
 ## Структура
 
 ```
