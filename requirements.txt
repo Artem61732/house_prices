@@ -1,12 +1,13 @@
-pandas>=3.0
-numpy>=2.4
-scipy>=1.17
-scikit-learn>=1.8
-xgboost>=3.2
-catboost>=1.2
-lightgbm>=4.6
-optuna>=4.8
-omegaconf>=2.3
-torch>=2.0
-matplotlib>=3.8
-seaborn>=0.13
+# Проверенные версии (Python 3.11+). Для воспроизводимости — pin, не lower bound.
+pandas==3.0.3
+numpy==2.4.6
+scipy==1.17.1
+scikit-learn==1.9.0
+xgboost==3.2.0
+catboost==1.2.10
+lightgbm==4.6.0
+optuna==4.9.0
+omegaconf==2.3.0
+torch==2.12.0
+matplotlib==3.10.9
+seaborn==0.13.2

@@ -6,9 +6,10 @@
 
 ```bash
 pip install -r requirements.txt
-# положить data/train.csv и data/test.csv
 python main.py
 ```
+
+Данные Kaggle уже лежат в `data/` (`train.csv`, `test.csv`) — отдельно скачивать не нужно.
 
 `python main.py` — ML: KFold CV + blend-сабмит → `submission.csv` + артефакты в `outputs/ml/`.
 
@@ -88,6 +89,9 @@ python -m dl.tune --n-trials 10 --n-epochs 40 --patience 8
 
 
 ### Локальная кросс-валидация
+
+Метрики на `log1p(SalePrice)`; RMSLE = RMSE. Воспроизведение: `python main.py --cv-only` (ML), `python -m dl.main` (DL).
+
 #### ML (KFold, 5 фолдов)
 
 | Модель | CV RMSLE |
@@ -129,11 +133,12 @@ house_prices/
 ├── bootstrap.py         # sys.path для entrypoints
 ├── config.py            # merge config.yaml + ml/config.yaml + dl/config.yaml
 ├── config.yaml          # paths, random_state, cv, preprocess
+├── data/                # train.csv, test.csv (в репозитории)
 ├── data.py
 ├── features.py
 ├── paths.py
 ├── requirements.txt
-├── notebooks/eda.ipynb
+├── notebooks/eda.ipynb  # EDA с выводами и визуализациями
 ├── ml/
 │   ├── config.yaml      # blend.weights, tune.n_trials
 │   ├── main.py          # CV всех моделей
@@ -150,7 +155,22 @@ house_prices/
     ├── model.py, dataset.py, train.py, train_config.py, constants.py
 ```
 
-`data/`, `outputs/`, `submission*.csv`, `.venv/` — в `.gitignore`.
+**В репозитории:** `data/`, `notebooks/eda.ipynb`, исходный код.
+
+**В `.gitignore`:** `outputs/`, `submission*.csv`, `.venv/`, `catboost_info/`, `__pycache__/`.
+
+## EDA
+
+`notebooks/eda.ipynb` — разведочный анализ с markdown-выводами и графиками:
+
+- распределение `SalePrice`, skew, `log1p`
+- пропуски (`PoolQC`, `LotFrontage` + `Neighborhood`)
+- корреляции (`OverallQual`, `GrLivArea`, `Garage*`, `TotalBsmtSF`)
+- выбросы `GrLivArea > 4000`
+- boxplot по `OverallQual`, `Neighborhood`
+- итоговая таблица «наблюдение → решение в `features.py`»
+
+Запуск: открыть ноутбук из `notebooks/` или `jupyter notebook notebooks/eda.ipynb`.
 
 ## Конфигурация
 
@@ -210,4 +230,6 @@ blend:
 
 ## Зависимости
 
-См. `requirements.txt`: pandas, scikit-learn, xgboost, catboost, lightgbm, optuna, omegaconf, torch, matplotlib, seaborn.
+Зафиксированные версии — в `requirements.txt` (проверено на Python 3.11+):
+
+pandas, scikit-learn, xgboost, catboost, lightgbm, optuna, omegaconf, torch, matplotlib, seaborn.
