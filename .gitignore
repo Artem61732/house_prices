@@ -20,3 +20,4 @@ catboost_info/
 submission.csv
 submission_dl.csv
 outputs/
+submissions/
