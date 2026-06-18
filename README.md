@@ -5,6 +5,9 @@
 ## Установка и запуск
 
 ```bash
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1   # Windows
+# source .venv/bin/activate    # Linux / macOS
 pip install -r requirements.txt
 python main.py
 ```
