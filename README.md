@@ -1,7 +1,3 @@
-# House Prices
-
-[Kaggle House Prices](https://www.kaggle.com/c/house-prices-advanced-regression-techniques): регрессия `SalePrice` по 79 признакам, метрика **RMSLE**.
-
 ## Установка и запуск
 
 ```bash
