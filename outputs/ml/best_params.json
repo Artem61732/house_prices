@@ -1,0 +1,39 @@
+{
+  "catboost": {
+    "iterations": 1500,
+    "random_state": 42,
+    "verbose": false,
+    "thread_count": -1,
+    "od_type": "Iter",
+    "od_wait": 30,
+    "allow_writing_files": false,
+    "learning_rate": 0.03736756940068347,
+    "depth": 5,
+    "l2_leaf_reg": 2.3485405867447886,
+    "min_data_in_leaf": 15,
+    "random_strength": 3.2799805717315427,
+    "bagging_temperature": 0.873311672929574,
+    "border_count": 128
+  },
+  "catboost_cv_rmsle": 0.11255003177228662,
+  "ridge": {
+    "alpha": 17.144464147129394
+  },
+  "ridge_cv_rmsle": 0.11189517975761291,
+  "lightgbm": {
+    "n_estimators": 2000,
+    "random_state": 42,
+    "verbose": -1,
+    "n_jobs": -1,
+    "learning_rate": 0.01294080454405871,
+    "num_leaves": 29,
+    "max_depth": 4,
+    "min_child_samples": 17,
+    "subsample": 0.7111528248218184,
+    "subsample_freq": 2,
+    "colsample_bytree": 0.7573645223456127,
+    "reg_alpha": 0.006426142424747383,
+    "reg_lambda": 0.25787726813750117
+  },
+  "lightgbm_cv_rmsle": 0.117591833511873
+}

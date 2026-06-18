@@ -16,9 +16,15 @@ venv/
 
 catboost_info/
 
-# Сгенерированные результаты
+# Сгенерированные артефакты (best_params.json хранятся в git — см. ! ниже)
 submission.csv
 submission_dl.csv
-outputs/
+outputs/*
+!outputs/ml/
+outputs/ml/*
+!outputs/ml/best_params.json
+!outputs/dl/
+outputs/dl/*
+!outputs/dl/best_params.json
 submissions/*
 !submissions/.gitkeep

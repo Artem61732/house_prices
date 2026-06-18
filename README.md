@@ -21,7 +21,8 @@ python main.py --cv-only              # только CV, без сабмитов
 python main.py --sub-only             # только сабмиты
 ```
 
-Без `outputs/ml/best_params.json` модели обучаются с дефолтными гиперпараметрами. Для тюнинга: `python -m ml.tune`.
+Без `outputs/ml/best_params.json` CatBoost / Ridge / LightGBM обучаются с дефолтными гиперпараметрами.  
+**В репозитории файлы уже есть** — после `git clone` тюнинг не нужен. Обновить: `python -m ml.tune`.
 
 ### Артефакты после прогона
 
@@ -123,8 +124,28 @@ python -m dl.tune --n-trials 10 --n-epochs 40 --patience 8
 
 LB ML чуть лучше CV blend — нормально: сабмит обучается на всём train, веса blend подобраны вручную. LB DL лучше CV tuned (~0.140) — full-train + другой split Kaggle.
 
+### Воспроизводимость: `best_params.json`
+
+После `git clone` тюнинг **не обязателен** — в репозитории лежат:
+
+| Файл | Что внутри |
+|------|------------|
+| `outputs/ml/best_params.json` | CatBoost, Ridge, LightGBM + CV RMSLE при тюнинге |
+| `outputs/dl/best_params.json` | DNN (ключ `dnn`) + CV RMSLE |
+
+**Что подхватывается автоматически при `python main.py`:**
+
+| Шаг | Источник параметров |
+|-----|---------------------|
+| ML CV (`ml/main.py`) | CatBoost, Ridge, LightGBM ← `outputs/ml/best_params.json` |
+| ML сабмит (blend) | те же + веса из `ml/config.yaml` |
+| DL CV (`dl/main.py`) | эксперименты из `dl/config.yaml` (не best_params) |
+| DL сабмит | `outputs/dl/best_params.json` |
+
+Linear Regression, Random Forest и XGBoost в ML CV всегда с дефолтными гиперпараметрами (не тюнятся).  
+CV-метрика на новом компьютере будет близка к README, если `random_state` и данные те же; небольшой разброс возможен из-за версий библиотек / GPU.
+
 ---
-## Структура
 
 ```
 house_prices/
@@ -138,6 +159,9 @@ house_prices/
 ├── paths.py
 ├── requirements.txt
 ├── notebooks/eda.ipynb  # EDA с выводами и визуализациями
+├── outputs/
+│   ├── ml/best_params.json   # тюненные ML-параметры (в git)
+│   └── dl/best_params.json   # тюненные DNN-параметры (в git)
 ├── ml/
 │   ├── config.yaml      # blend.weights, tune.n_trials
 │   ├── main.py          # CV всех моделей
@@ -154,9 +178,9 @@ house_prices/
     ├── model.py, dataset.py, train.py, train_config.py, constants.py
 ```
 
-**В репозитории:** `data/`, `notebooks/eda.ipynb`, исходный код.
+**В репозитории:** `data/`, `notebooks/eda.ipynb`, `outputs/ml/best_params.json`, `outputs/dl/best_params.json`, исходный код.
 
-**В `.gitignore`:** `outputs/`, `submission*.csv`, `.venv/`, `catboost_info/`, `__pycache__/`.
+**В `.gitignore`:** остальное в `outputs/` (results, backups), `submission*.csv`, `.venv/`, `catboost_info/`, `__pycache__/`.
 
 ## EDA
 
@@ -181,9 +205,9 @@ house_prices/
 | Порог skew для `log1p` | `config.yaml` → `preprocess.skew_threshold` |
 | **Веса blend** | `ml/config.yaml` → `blend.weights` (вручную, не из Optuna) |
 | `n_trials` для ML-тюнинга | `ml/config.yaml` → `tune.n_trials` (30) |
-| Гиперпараметры CatBoost / Ridge / LightGBM | `outputs/ml/best_params.json` |
+| Гиперпараметры CatBoost / Ridge / LightGBM | `outputs/ml/best_params.json` (в git) |
 | Дефолты и эксперименты DNN | `dl/config.yaml` |
-| Лучшие гиперпараметры DNN | `outputs/dl/best_params.json` |
+| Лучшие гиперпараметры DNN | `outputs/dl/best_params.json` (в git) |
 
 Веса blend для сабмита берутся из `ml/config.yaml`. Подбор весов на OOF (`ml/blend.py`) используется только при CV в `ml/main.py`.
 
@@ -225,7 +249,7 @@ blend:
 
 **Эксперименты**: список в `dl/config.yaml` → `dl.experiments` (9 штук).
 
-**Сабмит**: по умолчанию из `outputs/dl/best_params.json`; без него — эксперимент `embeddings` или `--experiment <name>`.
+**Сабмит**: по умолчанию из `outputs/dl/best_params.json` (файл в git); без него — эксперимент `embeddings` или `--experiment <name>`.
 
 ## Зависимости
 
